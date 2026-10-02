@@ -1,5 +1,5 @@
 # Five-Leaf-Clover_HK
-*README is still in progress, please log commits for the Phase 1 commits to issue #6 (Structuring the Github).
+
 
 ## System Name: CARE Eats (Customized Allergy and Restriction Engine)
 ## Team Leader: Noorjahan Kazi
@@ -14,4 +14,6 @@
 ## Languages:
 - Java (Backend)
 
+## Commit Guides
+- To be able to log time per member, submit commit comment with the time allocated for that task.
 
