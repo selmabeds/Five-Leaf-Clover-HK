@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# Java and Maven
+target/
+*.class
+
+# VS Code
+.vscode/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
