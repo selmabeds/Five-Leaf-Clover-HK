@@ -1,4 +1,8 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.application;
+
+import com.careeats.backend.reg.domain.Role;
+import com.careeats.backend.reg.domain.User;
+import com.careeats.backend.reg.infrastructure.UserRepo;
 
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 //to securely store passwords
