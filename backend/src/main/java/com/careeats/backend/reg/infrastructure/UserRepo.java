@@ -1,4 +1,6 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.infrastructure;
+
+import com.careeats.backend.reg.domain.User;
 
 import java.util.HashMap;
 import java.util.Map;
