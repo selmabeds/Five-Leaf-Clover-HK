@@ -18,6 +18,10 @@ public class RegistrationService {
         this.passwordEncoder = new BCryptPasswordEncoder();
     }
 
+    public User registerCustomer(String name, String email, String password) {
+    return register(name, email, password, Role.CUSTOMER);
+}
+
     public User register(String name, String email, String password, Role role) {
 
         if (name == null || name.isBlank()) {
