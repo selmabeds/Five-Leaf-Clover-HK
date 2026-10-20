@@ -1,0 +1,31 @@
+
+[
+  {
+    "id": 1,
+    "name": "Sarah",
+    "email": "customer@careeats.com",
+    "password": "Customer123!",
+    "role": "CUSTOMER"
+  },
+  {
+    "id": 2,
+    "name": "Adam",
+    "email": "restaurant@careeats.com",
+    "password": "Restaurant123!",
+    "role": "RESTAURANT"
+  },
+  {
+    "id": 3,
+    "name": "Maya",
+    "email": "courier@careeats.com",
+    "password": "Courier123!",
+    "role": "COURIER"
+  },
+  {
+    "id": 4,
+    "name": "Alex",
+    "email": "operator@careeats.com",
+    "password": "Operator123!",
+    "role": "OPERATOR"
+  }
+]
