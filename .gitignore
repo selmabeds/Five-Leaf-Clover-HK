@@ -5,6 +5,10 @@
 target/
 *.class
 
+# React
+node_modules/
+dist/
+
 # VS Code
 .vscode/
 
