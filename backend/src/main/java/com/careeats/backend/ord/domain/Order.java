@@ -84,12 +84,11 @@ public class Order {
     }
 
     private void changeStatus(OrderStatus newStatus) {
+
         OrderStatus previousStatus = this.status;
 
-        String eventId = UUID.randomUUID().toString();
-
         StateTransitionRecord record = new StateTransitionRecord(
-                eventId,
+                UUID.randomUUID().toString(),
                 orderId,
                 previousStatus,
                 newStatus
@@ -100,6 +99,7 @@ public class Order {
     }
 
     public void accept() {
+
         if (status != OrderStatus.PLACED) {
             throw new IllegalStateException(
                     "Only placed orders can be accepted"
@@ -109,7 +109,11 @@ public class Order {
         changeStatus(OrderStatus.ACCEPTED);
     }
 
-    public void startPreparing() {
+    // Package-private: only classes in the domain package
+    // can call this method.
+    // PreparationQueue uses it to enforce FIFO.
+    void startPreparing() {
+
         if (status != OrderStatus.ACCEPTED) {
             throw new IllegalStateException(
                     "Only accepted orders can start preparation"
@@ -120,6 +124,7 @@ public class Order {
     }
 
     public void markReady() {
+
         if (status != OrderStatus.PREPARING) {
             throw new IllegalStateException(
                     "Only preparing orders can be marked ready"
@@ -130,6 +135,7 @@ public class Order {
     }
 
     public void reject(String reason) {
+
         if (status != OrderStatus.PLACED) {
             throw new IllegalStateException(
                     "Only placed orders can be rejected"
@@ -146,10 +152,27 @@ public class Order {
         changeStatus(OrderStatus.REJECTED);
     }
 
+    // Customer cancellation
     public void cancel() {
+
         if (status != OrderStatus.PLACED) {
             throw new IllegalStateException(
-                    "Only placed orders can be cancelled"
+                    "Customers can only cancel placed orders"
+            );
+        }
+
+        changeStatus(OrderStatus.CANCELLED);
+    }
+
+    // Operator cancellation
+    public void cancelByOperator() {
+
+        if (status != OrderStatus.PLACED
+                && status != OrderStatus.ACCEPTED
+                && status != OrderStatus.PREPARING) {
+
+            throw new IllegalStateException(
+                    "Operator cannot cancel an order in status: " + status
             );
         }
 
