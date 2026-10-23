@@ -1,4 +1,8 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.presentation;
+
+import com.careeats.backend.reg.application.RegistrationService;
+import com.careeats.backend.reg.domain.User;
+import com.careeats.backend.reg.domain.Role;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

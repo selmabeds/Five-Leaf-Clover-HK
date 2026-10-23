@@ -1,4 +1,6 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.infrastructure;
+
+import com.careeats.backend.reg.application.RegistrationService;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

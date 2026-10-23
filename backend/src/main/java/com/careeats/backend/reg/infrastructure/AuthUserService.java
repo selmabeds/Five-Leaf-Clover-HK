@@ -1,4 +1,6 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.infrastructure;
+
+import com.careeats.backend.reg.domain.User;
 
 import org.springframework.security.core.userdetails.UserDetails; //account info needed for authentification
 import org.springframework.security.core.userdetails.UserDetailsService; //retive accounts

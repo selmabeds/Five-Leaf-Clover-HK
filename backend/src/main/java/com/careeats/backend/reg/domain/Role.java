@@ -1,5 +1,4 @@
-package com.careeats.backend.reg;
-
+package com.careeats.backend.reg.domain;
 public enum Role {
     CUSTOMER,
     RESTAURANT,

@@ -12,9 +12,9 @@ import com.careeats.backend.ord.domain.Restaurant;
 import com.careeats.backend.ord.infrastructure.OrderRepository;
 import com.careeats.backend.ord.infrastructure.RestaurantRepository;
 
-import com.careeats.backend.reg.Role;
-import com.careeats.backend.reg.User;
-import com.careeats.backend.reg.UserRepo;
+import com.careeats.backend.reg.domain.Role;
+import com.careeats.backend.reg.domain.User;
+import com.careeats.backend.reg.infrastructure.UserRepo;
 
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;

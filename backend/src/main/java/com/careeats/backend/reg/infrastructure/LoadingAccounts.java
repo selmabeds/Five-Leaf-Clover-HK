@@ -1,4 +1,7 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.infrastructure;
+
+import com.careeats.backend.reg.application.RegistrationService;
+import com.careeats.backend.reg.domain.Role;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
