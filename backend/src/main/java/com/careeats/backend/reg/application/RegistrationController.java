@@ -1,7 +1,10 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.application;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import com.careeats.backend.reg.domain.Role;
+import com.careeats.backend.reg.domain.User;
 
 @RestController
 @RequestMapping("/api/register")

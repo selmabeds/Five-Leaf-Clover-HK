@@ -1,8 +1,11 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.application;
 
 import org.springframework.security.core.userdetails.UserDetails; //account info needed for authentification
 import org.springframework.security.core.userdetails.UserDetailsService; //retive accounts
 import org.springframework.security.core.userdetails.UsernameNotFoundException; //in case account doesnt exist
+
+import com.careeats.backend.reg.infrastructure.UserRepo;
+import com.careeats.backend.reg.domain.User;
 
 public class AuthUserService implements UserDetailsService {
 
