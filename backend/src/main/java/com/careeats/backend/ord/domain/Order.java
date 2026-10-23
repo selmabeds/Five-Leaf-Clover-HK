@@ -12,7 +12,7 @@ public class Order {
     private final Long customerId;
     private final Long restaurantId;
 
-    private OrderStatus status;
+    private OrderState state;
     private String rejectionReason;
 
     private final List<OrderLine> orderLines;
@@ -42,7 +42,7 @@ public class Order {
         this.orderId = orderId;
         this.customerId = customerId;
         this.restaurantId = restaurantId;
-        this.status = OrderStatus.PLACED;
+        this.state = new PlacedState();
 
         this.orderLines = new ArrayList<>(orderLines);
         this.transitionHistory = new ArrayList<>();
@@ -68,7 +68,7 @@ public class Order {
     }
 
     public OrderStatus getStatus() {
-        return status;
+        return state.getStatus();
     }
 
     public String getRejectionReason() {
@@ -83,99 +83,45 @@ public class Order {
         return Collections.unmodifiableList(transitionHistory);
     }
 
-    private void changeStatus(OrderStatus newStatus) {
-
-        OrderStatus previousStatus = this.status;
+    private void changeState(OrderState nextState) {
 
         StateTransitionRecord record = new StateTransitionRecord(
                 UUID.randomUUID().toString(),
                 orderId,
-                previousStatus,
-                newStatus
+                state.getStatus(),
+                nextState.getStatus()
         );
 
-        this.status = newStatus;
+        this.state = nextState;
         this.transitionHistory.add(record);
     }
 
-    public void accept() {
+/*6 Transition methods*/
+ public void accept() {
+    changeState(state.accept());
+}
 
-        if (status != OrderStatus.PLACED) {
-            throw new IllegalStateException(
-                    "Only placed orders can be accepted"
-            );
-        }
+// Package-private: only PreparationQueue can call this (R-ORD-03 FIFO)
+void startPreparing() {
+    changeState(state.startPreparing());
+}
 
-        changeStatus(OrderStatus.ACCEPTED);
-    }
+public void markReady() {
+    changeState(state.markReady());
+}
 
-    // Package-private: only classes in the domain package
-    // can call this method.
-    // PreparationQueue uses it to enforce FIFO.
-    void startPreparing() {
+public void reject(String reason) {
+    OrderState nextState = state.reject(reason);
+    this.rejectionReason = reason;
+    changeState(nextState);
+}
 
-        if (status != OrderStatus.ACCEPTED) {
-            throw new IllegalStateException(
-                    "Only accepted orders can start preparation"
-            );
-        }
+public void cancel() {
+    changeState(state.cancel());
+}
 
-        changeStatus(OrderStatus.PREPARING);
-    }
+public void cancelByOperator() {
+    changeState(state.cancelByOperator());
+}
 
-    public void markReady() {
-
-        if (status != OrderStatus.PREPARING) {
-            throw new IllegalStateException(
-                    "Only preparing orders can be marked ready"
-            );
-        }
-
-        changeStatus(OrderStatus.READY);
-    }
-
-    public void reject(String reason) {
-
-        if (status != OrderStatus.PLACED) {
-            throw new IllegalStateException(
-                    "Only placed orders can be rejected"
-            );
-        }
-
-        if (reason == null || reason.isBlank()) {
-            throw new IllegalArgumentException(
-                    "A rejection reason is required"
-            );
-        }
-
-        this.rejectionReason = reason;
-        changeStatus(OrderStatus.REJECTED);
-    }
-
-    // Customer cancellation
-    public void cancel() {
-
-        if (status != OrderStatus.PLACED) {
-            throw new IllegalStateException(
-                    "Customers can only cancel placed orders"
-            );
-        }
-
-        changeStatus(OrderStatus.CANCELLED);
-    }
-
-    // Operator cancellation
-    public void cancelByOperator() {
-
-        if (status != OrderStatus.PLACED
-                && status != OrderStatus.ACCEPTED
-                && status != OrderStatus.PREPARING) {
-
-            throw new IllegalStateException(
-                    "Operator cannot cancel an order in status: " + status
-            );
-        }
-
-        changeStatus(OrderStatus.CANCELLED);
-    }
 }
