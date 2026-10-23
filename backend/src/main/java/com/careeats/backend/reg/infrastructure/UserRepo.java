@@ -1,7 +1,9 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.infrastructure;
 
 import java.util.HashMap;
 import java.util.Map;
+
+import com.careeats.backend.reg.domain.User;
 
 public class UserRepo {
 

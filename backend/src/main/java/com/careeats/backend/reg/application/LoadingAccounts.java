@@ -1,10 +1,12 @@
-package com.careeats.backend.reg;
+package com.careeats.backend.reg.application;
+import com.careeats.backend.reg.domain.Role;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
+
 import java.util.List;
 
 @Component
