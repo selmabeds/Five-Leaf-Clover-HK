@@ -8,6 +8,11 @@ import com.careeats.backend.ord.domain.OrderLine;
 import com.careeats.backend.ord.domain.OrderStatus;
 import com.careeats.backend.ord.domain.PreparationQueue;
 import com.careeats.backend.ord.domain.Restaurant;
+import com.careeats.backend.ord.domain.OrderEventPublisher;
+import com.careeats.backend.ord.domain.OrderEventLogObserver;
+import com.careeats.backend.ord.domain.OrderStatusObserver;
+import com.careeats.backend.ord.domain.StateTransitionRecord;
+
 
 import com.careeats.backend.ord.infrastructure.OrderRepository;
 import com.careeats.backend.ord.infrastructure.RestaurantRepository;
@@ -33,6 +38,16 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final RestaurantRepository restaurantRepository;
     private final UserRepo userRepo;
+    
+    private final OrderEventPublisher eventPublisher =
+        new OrderEventPublisher();
+
+    private final OrderEventLogObserver eventLogObserver =
+        new OrderEventLogObserver();
+
+    private final OrderStatusObserver statusObserver =
+        new OrderStatusObserver();
+
 
     // Restaurant user ID -> Restaurant ID
     private final Map<Long, Long> restaurantAssignments;
@@ -64,6 +79,21 @@ public class OrderService {
         this.userRepo = userRepo;
         this.restaurantAssignments =
                 new HashMap<>(restaurantAssignments);
+        eventPublisher.registerObserver(eventLogObserver);
+        eventPublisher.registerObserver(statusObserver);
+
+    }
+
+    private void notifyLatestTransition(Order order) {
+        List<StateTransitionRecord> history =
+            order.getTransitionHistory();
+
+        if (!history.isEmpty()) {
+            StateTransitionRecord latestRecord =
+                history.get(history.size() - 1);
+
+        eventPublisher.notifyObservers(latestRecord);
+        }
     }
 
     // Find the currently authenticated user
@@ -248,9 +278,13 @@ public class OrderService {
                 new ArrayList<>(orderLines)
         );
 
+       
         orderRepository.save(order);
 
+        notifyLatestTransition(order);
+
         return order;
+
     }
 
     // ACCEPT ORDER
@@ -262,12 +296,15 @@ public class OrderService {
 
         PreparationQueue queue =
                 getPreparationQueue(order.getRestaurantId());
-
+ 
         order.accept();
 
         queue.addOrder(order);
 
+        notifyLatestTransition(order);
+
         return order;
+
     }
 
     // REJECT ORDER
@@ -280,9 +317,13 @@ public class OrderService {
 
         requireRestaurantStaff(order.getRestaurantId());
 
+        
         order.reject(reason);
 
+        notifyLatestTransition(order);
+
         return order;
+
     }
 
     // START NEXT ORDER IN FIFO SEQUENCE
@@ -301,9 +342,13 @@ public class OrderService {
             );
         }
 
+        
         queue.startNextOrder();
 
+        notifyLatestTransition(nextOrder);
+
         return nextOrder;
+
     }
 
     // MARK ORDER READY
@@ -314,6 +359,8 @@ public class OrderService {
         requireRestaurantStaff(order.getRestaurantId());
 
         order.markReady();
+
+        notifyLatestTransition(order);
 
         return order;
     }
@@ -376,6 +423,8 @@ public class OrderService {
                     "Only customers and operators can cancel orders"
             );
         }
+
+        notifyLatestTransition(order);
 
         return order;
     }
