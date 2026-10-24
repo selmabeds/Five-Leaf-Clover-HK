@@ -32,7 +32,8 @@ public class MenuItem {
             throw new IllegalArgumentException("Price cannot be negative");
         }
 
-        if (ingredients == null || ingredients.contains(null)) {
+        if (ingredients == null ||
+        ingredients.stream().anyMatch(item -> item == null)) {
             throw new IllegalArgumentException("Valid ingredients are required");
         }
 

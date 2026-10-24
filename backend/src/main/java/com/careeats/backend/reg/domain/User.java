@@ -1,5 +1,5 @@
-
 package com.careeats.backend.reg.domain;
+
 public class User {
 
     private Long id;

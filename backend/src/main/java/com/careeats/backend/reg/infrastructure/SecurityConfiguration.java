@@ -1,13 +1,14 @@
 package com.careeats.backend.reg.infrastructure;
 
-import com.careeats.backend.reg.application.RegistrationService;
-
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+
+import com.careeats.backend.reg.application.AuthUserService;
+import com.careeats.backend.reg.application.RegistrationService;
 
 @Configuration
 public class SecurityConfiguration {
