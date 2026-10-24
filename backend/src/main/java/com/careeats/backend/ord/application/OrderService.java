@@ -1,18 +1,23 @@
 
 package com.careeats.backend.ord.application;
 
-import com.careeats.backend.ord.domain.MenuItem;
-import com.careeats.backend.ord.domain.MenuItemStatus;
+import com.careeats.backend.ord.domain.ItemAvailableHandler;
+import com.careeats.backend.ord.domain.ItemBelongsToRestaurantHandler;
+import com.careeats.backend.ord.domain.NoDuplicateItemsHandler;
 import com.careeats.backend.ord.domain.Order;
 import com.careeats.backend.ord.domain.OrderLine;
+import com.careeats.backend.ord.domain.OrderNotEmptyHandler;
+import com.careeats.backend.ord.domain.OrderPlacementHandler;
+import com.careeats.backend.ord.domain.OrderPlacementRequest;
 import com.careeats.backend.ord.domain.OrderStatus;
 import com.careeats.backend.ord.domain.PreparationQueue;
 import com.careeats.backend.ord.domain.Restaurant;
+import com.careeats.backend.ord.domain.RestaurantExistsHandler;
+import com.careeats.backend.ord.domain.RestaurantOpenHandler;
 import com.careeats.backend.ord.domain.OrderEventPublisher;
 import com.careeats.backend.ord.domain.OrderEventLogObserver;
 import com.careeats.backend.ord.domain.OrderStatusObserver;
 import com.careeats.backend.ord.domain.StateTransitionRecord;
-
 
 import com.careeats.backend.ord.infrastructure.OrderRepository;
 import com.careeats.backend.ord.infrastructure.RestaurantRepository;
@@ -26,10 +31,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
 public class OrderService {
@@ -37,6 +40,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final RestaurantRepository restaurantRepository;
     private final UserRepo userRepo;
+    private final OrderPlacementHandler placementChain; //Chain of Responsibility order placement validation (R-ORD-02)
     
     private final OrderEventPublisher eventPublisher =
         new OrderEventPublisher();
@@ -80,7 +84,17 @@ public class OrderService {
                 new HashMap<>(restaurantAssignments);
         eventPublisher.registerObserver(eventLogObserver);
         eventPublisher.registerObserver(statusObserver);
+        
+        OrderPlacementHandler firstHandler = new RestaurantExistsHandler();
 
+        firstHandler
+                .setNext(new RestaurantOpenHandler())
+                .setNext(new OrderNotEmptyHandler())
+                .setNext(new NoDuplicateItemsHandler())
+                .setNext(new ItemBelongsToRestaurantHandler())
+                .setNext(new ItemAvailableHandler());
+
+        this.placementChain = firstHandler;
     }
 
     private void notifyLatestTransition(Order order) {
@@ -197,72 +211,16 @@ public class OrderService {
             List<OrderLine> orderLines
     ) {
 
+        // Permission check stays here: who may place an order
         User customer = requireCustomer();
 
         Restaurant restaurant =
                 restaurantRepository.findById(restaurantId);
 
-        if (restaurant == null) {
-            throw new IllegalArgumentException(
-                    "Restaurant not found"
-            );
-        }
-
-        if (!restaurant.isOpen()) {
-            throw new IllegalStateException(
-                    "Restaurant is not accepting orders"
-            );
-        }
-
-        if (orderLines == null || orderLines.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "Order must contain at least one item"
-            );
-        }
-
-        Set<Long> requestedItemIds = new HashSet<>();
-
-        for (OrderLine line : orderLines) {
-
-            if (line == null) {
-                throw new IllegalArgumentException(
-                        "Order line cannot be null"
-                );
-            }
-
-            Long itemId = line.getMenuItemId();
-
-            if (!requestedItemIds.add(itemId)) {
-                throw new IllegalArgumentException(
-                        "Duplicate menu item: " + itemId
-                );
-            }
-
-            MenuItem matchingItem = null;
-
-            for (MenuItem item : restaurant.getMenuItems()) {
-
-                if (item.getItemId().equals(itemId)) {
-                    matchingItem = item;
-                    break;
-                }
-            }
-
-            if (matchingItem == null) {
-                throw new IllegalArgumentException(
-                        "Menu item does not belong to this restaurant: "
-                                + itemId
-                );
-            }
-
-            if (matchingItem.getStatus()
-                    != MenuItemStatus.AVAILABLE) {
-
-                throw new IllegalStateException(
-                        "Menu item is sold out: " + itemId
-                );
-            }
-        }
+        // Validation chain: whether this order is valid (R-ORD-02)
+        placementChain.handle(
+                new OrderPlacementRequest(restaurantId, restaurant, orderLines)
+        );
 
         Long orderId = nextOrderId.getAndIncrement();
 
@@ -277,13 +235,11 @@ public class OrderService {
                 new ArrayList<>(orderLines)
         );
 
-       
         orderRepository.save(order);
 
         notifyLatestTransition(order);
 
         return order;
-
     }
 
     // ACCEPT ORDER
