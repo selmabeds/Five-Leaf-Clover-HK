@@ -1,8 +1,32 @@
-
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './App.css';
 
 function App() {
+  const restaurantCategories = {
+  1: 'Other',
+  2: 'Gluten-Free',
+  3: 'Gluten-Free',
+  4: 'Gluten-Free',
+  5: 'Halal',
+  6: 'Halal',
+  7: 'Halal',
+  8: 'Vegan',
+  9: 'Vegan',
+  10: 'Dairy-Free',
+  11: 'Dairy-Free',
+  12: 'Dairy-Free',
+  13: 'Nut-Free',
+  14: 'Nut-Free'
+};
+
+const categories = [
+  'All',
+  'Gluten-Free',
+  'Halal',
+  'Vegan',
+  'Dairy-Free',
+  'Nut-Free'
+];
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
@@ -13,6 +37,20 @@ function App() {
   const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
   const [quantities, setQuantities] = useState({});
   const [orders, setOrders] = useState([]);
+  const [activeTab, setActiveTab] = useState('restaurants');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+
+    useEffect(() => {
+    if (loggedIn) {
+      loadRestaurants();
+    }
+  }, [loggedIn]);
+
+  useEffect(() => {
+    if (loggedIn && activeTab === 'orders') {
+      loadRestaurantOrders();
+    }
+  }, [loggedIn, activeTab]);
 
   function addLog(message) {
     setLogs(previous => [...previous, message]);
@@ -38,137 +76,136 @@ function App() {
     return token;
   }
 
-async function loadRestaurants() {
-  try {
-    const response = await fetch('/api/restaurants', {
-      credentials: 'include'
-    });
+  async function loadRestaurants() {
+    try {
+      const response = await fetch('/api/restaurants', {
+        credentials: 'include'
+      });
 
-    if (!response.ok) {
-      throw new Error('Could not load restaurants');
-    }
-
-    const data = await response.json();
-    setRestaurants(data);
-    addLog('Restaurants loaded');
-  } catch (error) {
-    addLog('Error loading restaurants: ' + error.message);
-    setMessage(error.message);
-  }
-}
-
-
-async function loadMenu(restaurantId) {
-  try {
-    const response = await fetch(
-      `/api/restaurants/${restaurantId}/menu`,
-      { credentials: 'include' }
-    );
-
-    if (!response.ok) {
-      throw new Error('Could not load menu');
-    }
-
-    const data = await response.json();
-    setMenu(data);
-    setSelectedRestaurantId(restaurantId);
-    addLog('Menu loaded for restaurant ' + restaurantId);
-
-  } catch (error) {
-    addLog('Error loading menu: ' + error.message);
-    setMessage(error.message);
-  }
-}
-
-async function placeOrder(menuItemId) {
-  console.log('Place Order clicked:', menuItemId);
-
-  try {
-    const csrfToken = await getCsrfToken();
-
-    const response = await fetch('/api/orders', {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken
-      },
-      body: JSON.stringify({
-        restaurantId: selectedRestaurantId,
-        orderLines: [
-          {
-            menuItemId: menuItemId,
-            quantity: Number(quantities[menuItemId] ?? 1)
-          }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText);
-    }
-
-    const order = await response.json();
-
-    addLog('Order placed successfully: #' + order.orderId);
-    setMessage('Order placed successfully: #' + order.orderId);
-
-  } catch (error) {
-    addLog('Order placement failed: ' + error.message);
-    setMessage('Order placement failed: ' + error.message);
-  }
-}
-    async function loadRestaurantOrders() {
-      try {
-        const response = await fetch('/api/restaurants/1/orders', {
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-
-        const data = await response.json();
-        setOrders(data);
-        addLog('Restaurant orders loaded');
-      } catch (error) {
-        addLog('Error loading orders: ' + error.message);
-        setMessage(error.message);
+      if (!response.ok) {
+        throw new Error('Could not load restaurants');
       }
+
+      const data = await response.json();
+      setRestaurants(data);
+      addLog('Restaurants loaded');
+    } catch (error) {
+      addLog('Error loading restaurants: ' + error.message);
+      setMessage(error.message);
     }
-
-
-async function runOrderAction(url, action) {
-  try {
-    const csrfToken = await getCsrfToken();
-
-    const response = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken
-      },
-      ...(action === 'Reject'
-        ? { body: JSON.stringify({ reason: 'Rejected by restaurant' }) }
-        : {})
-    });
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    const order = await response.json();
-    addLog(action + ' successful: Order #' + order.orderId);
-    setMessage(action + ' successful');
-
-    await loadRestaurantOrders();
-  } catch (error) {
-    addLog(action + ' failed: ' + error.message);
-    setMessage(action + ' failed: ' + error.message);
   }
-}
+
+  async function loadMenu(restaurantId) {
+    try {
+      const response = await fetch(
+        `/api/restaurants/${restaurantId}/menu`,
+        { credentials: 'include' }
+      );
+
+      if (!response.ok) {
+        throw new Error('Could not load menu');
+      }
+
+      const data = await response.json();
+
+      setMenu(data);
+      setSelectedRestaurantId(restaurantId);
+      setActiveTab('menu');
+
+      addLog('Menu loaded for restaurant ' + restaurantId);
+    } catch (error) {
+      addLog('Error loading menu: ' + error.message);
+      setMessage(error.message);
+    }
+  }
+
+  async function placeOrder(menuItemId) {
+    try {
+      const csrfToken = await getCsrfToken();
+
+      const response = await fetch('/api/orders', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken
+        },
+        body: JSON.stringify({
+          restaurantId: selectedRestaurantId,
+          orderLines: [
+            {
+              menuItemId: menuItemId,
+              quantity: Number(quantities[menuItemId] ?? 1)
+            }
+          ]
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(errorText);
+      }
+
+      const order = await response.json();
+
+      addLog('Order placed successfully: #' + order.orderId);
+      setMessage('Order placed successfully: #' + order.orderId);
+    } catch (error) {
+      addLog('Order placement failed: ' + error.message);
+      setMessage('Order placement failed: ' + error.message);
+    }
+  }
+
+  async function loadRestaurantOrders() {
+    try {
+      const response = await fetch('/api/restaurants/1/orders', {
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const data = await response.json();
+      setOrders(data);
+      addLog('Restaurant orders loaded');
+    } catch (error) {
+      addLog('Error loading orders: ' + error.message);
+      setMessage(error.message);
+    }
+  }
+
+  async function runOrderAction(url, action) {
+    try {
+      const csrfToken = await getCsrfToken();
+
+      const response = await fetch(url, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-TOKEN': csrfToken
+        },
+        ...(action === 'Reject'
+          ? { body: JSON.stringify({ reason: 'Rejected by restaurant' }) }
+          : {})
+      });
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      const order = await response.json();
+
+      addLog(action + ' successful: Order #' + order.orderId);
+      setMessage(action + ' successful');
+
+      await loadRestaurantOrders();
+    } catch (error) {
+      addLog(action + ' failed: ' + error.message);
+      setMessage(action + ' failed: ' + error.message);
+    }
+  }
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -192,6 +229,7 @@ async function runOrderAction(url, action) {
 
       if (response.ok) {
         setLoggedIn(true);
+        setActiveTab('restaurants');
         addLog('Login successful: ' + email);
         setMessage('Login successful');
       } else {
@@ -220,9 +258,15 @@ async function runOrderAction(url, action) {
       });
 
       if (response.ok) {
-        setLoggedIn(false);
         addLog('Logout successful: ' + email);
+        setLoggedIn(false);
         setPassword('');
+        setRestaurants([]);
+        setMenu([]);
+        setSelectedRestaurantId(null);
+        setQuantities({});
+        setOrders([]);
+        setActiveTab('restaurants');
         setMessage('Logged out successfully');
       } else {
         setMessage('Logout failed');
@@ -233,114 +277,235 @@ async function runOrderAction(url, action) {
     }
   }
 
+    const filteredRestaurants = restaurants.filter(restaurant => {
+    if (selectedCategory === 'All') {
+      return true;
+    }
+
+    return restaurantCategories[restaurant.restaurantId] === selectedCategory;
+  });
+
   if (loggedIn) {
     return (
-      <div className="login-container">
-        <div className="login-form">
+      <div className="dashboard-container">
+        <div className="dashboard-panel">
           <h1>CARE Eats</h1>
           <h2>Dashboard</h2>
+
           <p>Logged in as {email}</p>
-          <p>Authentication successful.</p>
 
-                <h3>Restaurants</h3>
-                <button onClick={loadRestaurants}>Browse Restaurants</button>
+          <nav className="dashboard-tabs">
+            <button
+              type="button"
+              className={activeTab === 'restaurants' ? 'active' : ''}
+              onClick={() => setActiveTab('restaurants')}
+            >
+              Restaurants
+            </button>
 
-                {restaurants.map(restaurant => (
-                  <div key={restaurant.restaurantId}>
-                    <p>{restaurant.name}</p>
-                    <button onClick={() => loadMenu(restaurant.restaurantId)}>
+            <button
+              type="button"
+              className={activeTab === 'menu' ? 'active' : ''}
+              onClick={() => setActiveTab('menu')}
+            >
+              Menu
+            </button>
+
+            <button
+              type="button"
+              className={activeTab === 'orders' ? 'active' : ''}
+              onClick={() => setActiveTab('orders')}
+            >
+              Restaurant Orders
+            </button>
+
+            <button
+              type="button"
+              className={activeTab === 'logs' ? 'active' : ''}
+              onClick={() => setActiveTab('logs')}
+            >
+              Activity Log
+            </button>
+          </nav>
+
+          
+          {activeTab === 'restaurants' && (
+            <section>
+              <h3>Explore Restaurants</h3>
+
+              <div className="category-tabs">
+                {categories.map(category => (
+                  <button
+                    key={category}
+                    type="button"
+                    className={selectedCategory === category ? 'active' : ''}
+                    onClick={() => setSelectedCategory(category)}
+                  >
+                    {category}
+                  </button>
+                ))}
+              </div>
+
+              <div className="restaurant-grid">
+                {filteredRestaurants.map(restaurant => (
+                  <div className="restaurant-card" key={restaurant.restaurantId}>
+                    <h4>{restaurant.name}</h4>
+
+                    <p>{restaurantCategories[restaurant.restaurantId] ?? 'Other'}</p>
+
+                    <p>
+                      Status: {restaurant.status}
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => loadMenu(restaurant.restaurantId)}
+                    >
                       View Menu
                     </button>
                   </div>
                 ))}
+              </div>
+            </section>
+          )}
 
-                <h3>Menu</h3>
-                
-            {menu.map(item => (
-        <div key={item.itemId}>
-          <p>{item.name} - ${item.price} - {item.status}</p>
 
-          {item.status === 'AVAILABLE' && (
-            <>
-              <input
-                type="number"
-                min="1"
-                value={quantities[item.itemId] ?? 1}
-                onChange={event =>
-                  setQuantities(previous => ({
-                    ...previous,
-                    [item.itemId]: event.target.value
-                  }))
-                }
-              />
+          {activeTab === 'menu' && (
+            <section>
+              <h3>Menu</h3>
+
+              {selectedRestaurantId === null && (
+                <p>Select a restaurant from the Restaurants tab.</p>
+              )}
+
+              {menu.map(item => (
+                <div key={item.itemId}>
+                  <p>
+                    {item.name} - ${item.price} - {item.status}
+                  </p>
+
+                  {item.status === 'AVAILABLE' && (
+                    <>
+                      <input
+                        type="number"
+                        min="1"
+                        step="1"
+                        value={quantities[item.itemId] ?? 1}
+                        onChange={event =>
+                          setQuantities(previous => ({
+                            ...previous,
+                            [item.itemId]: event.target.value
+                          }))
+                        }
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => placeOrder(item.itemId)}
+                      >
+                        Place Order
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </section>
+          )}
+
+         {activeTab === 'orders' && (
+            <section>
+              <h3>Restaurant Orders</h3>
 
               <button
                 type="button"
-                onClick={() => placeOrder(item.itemId)}
+                onClick={loadRestaurantOrders}
               >
-                Place Order
+                Refresh Orders
               </button>
-            </>
+
+              {orders.map(order => (
+                <div key={order.orderId}>
+                  <p>
+                    Order #{order.orderId} — {order.status}
+                  </p>
+
+                  {order.status === 'PLACED' && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          runOrderAction(
+                            `/api/orders/${order.orderId}/accept`,
+                            'Accept'
+                          )
+                        }
+                      >
+                        Accept
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          runOrderAction(
+                            `/api/orders/${order.orderId}/reject`,
+                            'Reject'
+                          )
+                        }
+                      >
+                        Reject
+                      </button>
+                    </>
+                  )}
+
+                  {order.status === 'ACCEPTED' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        runOrderAction(
+                          `/api/restaurants/${order.restaurantId}/start-next`,
+                          'Start Preparation'
+                        )
+                      }
+                    >
+                      Start Preparation
+                    </button>
+                  )}
+
+                  {order.status === 'PREPARING' && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        runOrderAction(
+                          `/api/orders/${order.orderId}/ready`,
+                          'Mark Ready'
+                        )
+                      }
+                    >
+                      Mark Ready
+                    </button>
+                  )}
+                </div>
+              ))}
+            </section>
           )}
-        </div>
-      ))}
 
+          {activeTab === 'logs' && (
+            <section>
+              <h3>Activity Log</h3>
 
-          <button onClick={handleLogout}>Log Out</button>
-          <h3>Restaurant Orders</h3>
-              <button type="button" onClick={loadRestaurantOrders}>
-                View Restaurant Orders
-              </button>
+              <div className="activity-log">
+                {logs.map((log, index) => (
+                  <p key={index}>{log}</p>
+                ))}
+              </div>
+            </section>
+          )}
 
-              
-{orders.map(order => (
-  <div key={order.orderId}>
-    <p>Order #{order.orderId} — {order.status}</p>
-
-    {order.status === 'PLACED' && (
-      <>
-        <button type="button" onClick={() =>
-          runOrderAction(`/api/orders/${order.orderId}/accept`, 'Accept')
-        }>
-          Accept
-        </button>
-
-        <button type="button" onClick={() =>
-          runOrderAction(`/api/orders/${order.orderId}/reject`, 'Reject')
-        }>
-          Reject
-        </button>
-      </>
-    )}
-
-    {order.status === 'ACCEPTED' && (
-      <button type="button" onClick={() =>
-        runOrderAction(
-          `/api/restaurants/${order.restaurantId}/start-next`,
-          'Start Preparation'
-        )
-      }>
-        Start Preparation
-      </button>
-    )}
-
-    {order.status === 'PREPARING' && (
-      <button type="button" onClick={() =>
-        runOrderAction(`/api/orders/${order.orderId}/ready`, 'Mark Ready')
-      }>
-        Mark Ready
-      </button>
-    )}
-  </div>
-))}
-
-          <h3>Activity Log</h3>
-          <div className="activity-log">
-            {logs.map((log, index) => (
-              <p key={index}>{log}</p>
-            ))}
-          </div>
           <p role="status">{message}</p>
+
+          <button type="button" onClick={handleLogout}>
+            Log Out
+          </button>
         </div>
       </div>
     );
@@ -356,7 +521,7 @@ async function runOrderAction(url, action) {
           type="email"
           placeholder="Email"
           value={email}
-          onChange={(event) => setEmail(event.target.value)}
+          onChange={event => setEmail(event.target.value)}
           required
         />
 
@@ -364,11 +529,12 @@ async function runOrderAction(url, action) {
           type="password"
           placeholder="Password"
           value={password}
-          onChange={(event) => setPassword(event.target.value)}
+          onChange={event => setPassword(event.target.value)}
           required
         />
 
         <button type="submit">Log In</button>
+
         <p role="status">{message}</p>
       </form>
     </div>
