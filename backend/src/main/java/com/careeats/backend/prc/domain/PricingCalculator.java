@@ -38,17 +38,20 @@ public class PricingCalculator {
         ) < 0
                 ? pricingRules.smallOrderSurcharge()
                 : BigDecimal.ZERO;
+        BigDecimal serviceFee = itemSubtotal
+                .multiply(pricingRules.serviceFeeRate())
+                .setScale(DECIMAL_PLACES_AFTER_POINT, CURRENCY_ROUNDING);
 
         BigDecimal totalCharge = itemSubtotal
                 .add(pricingRules.deliveryFee())
-                .add(pricingRules.serviceFee())
+                .add(serviceFee)
                 .add(smallOrderSurcharge)
                 .setScale(DECIMAL_PLACES_AFTER_POINT, CURRENCY_ROUNDING);
 
         return new FareDecomposition(
                 itemSubtotal,
                 pricingRules.deliveryFee(),
-                pricingRules.serviceFee(),
+                serviceFee,
                 smallOrderSurcharge,
                 totalCharge
         );

@@ -5,15 +5,15 @@ import java.util.Objects;
 
 public record PricingRules(
         BigDecimal deliveryFee,
-        BigDecimal serviceFee,
+        BigDecimal serviceFeeRate,
         BigDecimal smallOrderThreshold,
         BigDecimal smallOrderSurcharge) {
 
     public PricingRules {
         requireNonNegative(deliveryFee, "Delivery fee");
-        requireNonNegative(serviceFee, "Service fee");
+        requireNonNegative(serviceFeeRate, "Service-fee rate");
         requireNonNegative(smallOrderThreshold, "Small-order threshold");
-        // The surcharge applies when the subtotal is below the limit in the pricing settings
+        // The surcharge applies when the item subtotal is below the configured threshold.
         requireNonNegative(smallOrderSurcharge, "Small-order surcharge");
     }
 

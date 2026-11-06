@@ -18,7 +18,7 @@ public class PricingConfiguration {
     @Bean
     public PricingRules pricingRules(
             @Value("${prc.pricing.delivery-fee}") BigDecimal deliveryFee,
-            @Value("${prc.pricing.service-fee}") BigDecimal serviceFee,
+            @Value("${prc.pricing.service-fee-rate}") BigDecimal serviceFeeRate,
             @Value("${prc.pricing.small-order-threshold}")
             BigDecimal smallOrderThreshold,
             @Value("${prc.pricing.small-order-surcharge}")
@@ -26,7 +26,7 @@ public class PricingConfiguration {
 
         return new PricingRules(
                 deliveryFee,
-                serviceFee,
+                serviceFeeRate,
                 smallOrderThreshold,
                 smallOrderSurcharge
         );

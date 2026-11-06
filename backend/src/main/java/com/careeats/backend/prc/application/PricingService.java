@@ -1,6 +1,8 @@
 package com.careeats.backend.prc.application;
 
 import com.careeats.backend.ord.domain.OrderStatus;
+import com.careeats.backend.reg.domain.Role;
+import com.careeats.backend.reg.domain.User;
 import com.careeats.backend.prc.domain.DeliveredOrder;
 import com.careeats.backend.prc.domain.FareDecomposition;
 import com.careeats.backend.prc.domain.LedgerEntry;
@@ -11,6 +13,7 @@ import com.careeats.backend.prc.infrastructure.LedgerRepository;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 
 public class PricingService {
@@ -75,6 +78,71 @@ public class PricingService {
                 fare,
                 deliveredOrder.deliveredAt()
         );
+    }
+
+    // Records an operator-authorized refund as a separate ledger entry
+    public synchronized LedgerEntry refundDeliveredOrder(
+            User operator,
+            Long orderId) {
+
+        Objects.requireNonNull(operator, "Operator is needed");
+        if (operator.getRole() != Role.OPERATOR) {
+            throw new SecurityException("Operator account required");
+        }
+        Objects.requireNonNull(orderId, "Order ID is needed");
+
+        LedgerEntry charge = ledgerRepository.findByOrderId(orderId).stream()
+                .filter(entry -> entry.type() == LedgerEntryType.CHARGE)
+                .filter(entry -> entry.orderState() == OrderStatus.DELIVERED)
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException(
+                        "A delivered charge is required before refunding"
+                ));
+
+        boolean alreadyRefunded = ledgerRepository.findByOrderId(orderId)
+                .stream()
+                .anyMatch(entry -> entry.type() == LedgerEntryType.REFUND);
+        if (alreadyRefunded) {
+            throw new IllegalStateException(
+                    "A refund already exists for this order"
+            );
+        }
+
+        LedgerEntry refund = new LedgerEntry(
+                charge.orderId(),
+                LedgerEntryType.REFUND,
+                OrderStatus.REFUNDED,
+                charge.customerId(),
+                charge.restaurantId(),
+                charge.courierId(),
+                charge.amount(),
+                charge.orderPlacedAt(),
+                charge.deliveredAt(),
+                clock.instant()
+        );
+
+        ledgerRepository.save(refund);
+        return refund;
+    }
+
+    // Returns only the ledger entries visible to the user's role
+    public synchronized List<LedgerEntry> historyFor(User user) {
+        Objects.requireNonNull(user, "User is needed");
+        Objects.requireNonNull(user.getId(), "User ID is needed");
+        Objects.requireNonNull(user.getRole(), "User role is needed");
+
+        return ledgerRepository.findAll().stream()
+                .filter(entry -> canView(user, entry))
+                .toList();
+    }
+
+    private boolean canView(User user, LedgerEntry entry) {
+        return switch (user.getRole()) {
+            case CUSTOMER -> user.getId().equals(entry.customerId());
+            case RESTAURANT -> user.getId().equals(entry.restaurantId());
+            case COURIER -> user.getId().equals(entry.courierId());
+            case OPERATOR -> true;
+        };
     }
 
 }
