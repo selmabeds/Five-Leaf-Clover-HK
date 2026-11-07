@@ -8,12 +8,11 @@ public class StateTransitionRecord {
     private final OrderStatus newStatus;
     private final LocalDateTime timestamp;
 
-    public StateTransitionRecord(
-            String eventId,
-            Long orderId,
-            OrderStatus previousStatus,
-            OrderStatus newStatus
-    ) {
+    public StateTransitionRecord(String eventId, Long orderId, OrderStatus previousStatus, OrderStatus newStatus) {
+        this(eventId, orderId, previousStatus, newStatus, LocalDateTime.now());
+    }
+
+    public StateTransitionRecord(String eventId, Long orderId, OrderStatus previousStatus, OrderStatus newStatus, LocalDateTime timestamp) {
         if (eventId == null || eventId.isBlank()) {
             throw new IllegalArgumentException(
                     "Event ID is required"
@@ -36,7 +35,7 @@ public class StateTransitionRecord {
         this.orderId = orderId;
         this.previousStatus = previousStatus;
         this.newStatus = newStatus;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = java.util.Objects.requireNonNull(timestamp);
     }
 
     public String getEventId() {

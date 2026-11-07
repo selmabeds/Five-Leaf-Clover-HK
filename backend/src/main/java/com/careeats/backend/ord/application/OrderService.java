@@ -31,11 +31,10 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
 
+@org.springframework.transaction.annotation.Transactional
 public class OrderService {
 
     private final OrderRepository orderRepository;
@@ -55,12 +54,6 @@ public class OrderService {
 
     // Restaurant user ID -> Restaurant ID
     private final Map<Long, Long> restaurantAssignments;
-
-    // Restaurant ID -> PreparationQueue
-    private final Map<Long, PreparationQueue> preparationQueues =
-            new HashMap<>();
-
-    private final AtomicLong nextOrderId = new AtomicLong(1);
 
     public OrderService(
             OrderRepository orderRepository,
@@ -82,7 +75,7 @@ public class OrderService {
         this.restaurantRepository = restaurantRepository;
         this.userRepo = userRepo;
         this.restaurantAssignments =
-                new HashMap<>(restaurantAssignments);
+                restaurantAssignments;
         eventPublisher.registerObserver(eventLogObserver);
         eventPublisher.registerObserver(statusObserver);
         
@@ -99,6 +92,7 @@ public class OrderService {
     }
 
     private void notifyLatestTransition(Order order) {
+        orderRepository.save(order);
         List<StateTransitionRecord> history =
             order.getTransitionHistory();
 
@@ -106,7 +100,18 @@ public class OrderService {
             StateTransitionRecord latestRecord =
                 history.get(history.size() - 1);
 
-        eventPublisher.notifyObservers(latestRecord);
+            if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+                org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCommit() {
+                            synchronized (OrderService.this) {
+                                eventPublisher.notifyObservers(latestRecord);
+                            }
+                        }
+                    });
+            } else {
+                eventPublisher.notifyObservers(latestRecord);
+            }
         }
     }
 
@@ -200,10 +205,9 @@ public class OrderService {
             );
         }
 
-        return preparationQueues.computeIfAbsent(
-                restaurantId,
-                id -> new PreparationQueue(id)
-        );
+        PreparationQueue queue = new PreparationQueue(restaurantId);
+        orderRepository.findAcceptedForRestaurant(restaurantId).forEach(queue::addOrder);
+        return queue;
     }
 
     // PLACE ORDER
@@ -211,6 +215,7 @@ public class OrderService {
             Long restaurantId,
             List<OrderLine> orderLines
     ) {
+        orderRepository.lockForWrite();
 
         // Permission check stays here: who may place an order
         User customer = requireCustomer();
@@ -223,10 +228,10 @@ public class OrderService {
                 new OrderPlacementRequest(restaurantId, restaurant, orderLines)
         );
 
-        Long orderId = nextOrderId.getAndIncrement();
+        Long orderId = orderRepository.nextId();
 
         while (orderRepository.existsById(orderId)) {
-            orderId = nextOrderId.getAndIncrement();
+            orderId = orderRepository.nextId();
         }
 
         Order order = new Order(
@@ -236,8 +241,6 @@ public class OrderService {
                 new ArrayList<>(orderLines)
         );
 
-        orderRepository.save(order);
-
         notifyLatestTransition(order);
 
         return order;
@@ -245,6 +248,7 @@ public class OrderService {
 
     // ACCEPT ORDER
     public synchronized Order acceptOrder(Long orderId) {
+        orderRepository.lockForWrite();
 
         Order order = requireOrder(orderId);
 
@@ -268,6 +272,7 @@ public class OrderService {
             Long orderId,
             String reason
     ) {
+        orderRepository.lockForWrite();
 
         Order order = requireOrder(orderId);
 
@@ -284,6 +289,7 @@ public class OrderService {
 
     // START NEXT ORDER IN FIFO SEQUENCE
     public synchronized Order startNextOrder(Long restaurantId) {
+        orderRepository.lockForWrite();
 
         requireRestaurantStaff(restaurantId);
 
@@ -309,6 +315,7 @@ public class OrderService {
 
     // MARK ORDER READY
     public synchronized Order markOrderReady(Long orderId) {
+        orderRepository.lockForWrite();
 
         Order order = requireOrder(orderId);
 
@@ -323,6 +330,7 @@ public class OrderService {
 
     // CANCEL ORDER - CUSTOMER OR OPERATOR
     public synchronized Order cancelOrder(Long orderId) {
+        orderRepository.lockForWrite();
 
         User user = getAuthenticatedUser();
         Order order = requireOrder(orderId);
@@ -386,6 +394,7 @@ public class OrderService {
     }
 
     // RETRIEVE ONE ORDER
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public synchronized Order getOrder(Long orderId) {
 
         User user = getAuthenticatedUser();
@@ -414,6 +423,7 @@ public class OrderService {
     }
 
     // RETRIEVE CUSTOMER'S ORDERS
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public synchronized List<Order> getCustomerOrders() {
 
         User customer = requireCustomer();
@@ -431,6 +441,7 @@ public class OrderService {
 
 
     // Retrive all order of a restaurant
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public synchronized List<Order> getRestaurantOrders(Long restaurantId) {
 
         // Step 1: Verify restaurant staff authorization

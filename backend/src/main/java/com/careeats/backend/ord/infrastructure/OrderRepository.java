@@ -10,6 +10,17 @@ import java.util.Map;
 
 public class OrderRepository {
 
+    private final java.util.concurrent.atomic.AtomicLong ids = new java.util.concurrent.atomic.AtomicLong(1);
+    public long nextId() { return ids.getAndIncrement(); }
+    public void lockForWrite() { }
+    public List<Order> findAcceptedForRestaurant(Long restaurantId) {
+        return findAll().stream()
+            .filter(o -> o.getRestaurantId().equals(restaurantId)
+                && o.getStatus() == com.careeats.backend.ord.domain.OrderStatus.ACCEPTED)
+            .sorted(java.util.Comparator.comparing(o -> o.getTransitionHistory().get(o.getTransitionHistory().size()-1).getTimestamp()))
+            .toList();
+    }
+
     private final Map<Long, Order> orders = new HashMap<>();
 
     public void save(Order order) {

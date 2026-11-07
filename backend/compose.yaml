@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: careeats
+      POSTGRES_USER: careeats
+      POSTGRES_PASSWORD: local-development-only
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - careeats-local:/var/lib/postgresql/data
+
+volumes:
+  careeats-local:

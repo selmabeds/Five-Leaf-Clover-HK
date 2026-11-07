@@ -10,7 +10,6 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import java.util.List;
 
-@Component
 public class LoadingAccounts implements CommandLineRunner {
 
     private final RegistrationService registrationService;

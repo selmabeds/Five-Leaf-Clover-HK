@@ -20,6 +20,11 @@ public class Order {
 
     public Order(Long orderId, Long customerId,
                  Long restaurantId, List<OrderLine> orderLines) {
+        this(orderId, customerId, restaurantId, orderLines, true);
+    }
+
+    private Order(Long orderId, Long customerId, Long restaurantId,
+                  List<OrderLine> orderLines, boolean newOrder) {
 
         if (orderId == null || customerId == null || restaurantId == null) {
             throw new IllegalArgumentException(
@@ -33,7 +38,7 @@ public class Order {
             );
         }
 
-        if (orderLines.contains(null)) {
+        if (orderLines.stream().anyMatch(java.util.Objects::isNull)) {
             throw new IllegalArgumentException(
                     "Order lines cannot contain null"
             );
@@ -47,12 +52,32 @@ public class Order {
         this.orderLines = new ArrayList<>(orderLines);
         this.transitionHistory = new ArrayList<>();
 
-        transitionHistory.add(new StateTransitionRecord(
+        if (newOrder) transitionHistory.add(new StateTransitionRecord(
                 UUID.randomUUID().toString(),
                 orderId,
                 null,
                 OrderStatus.PLACED
         ));
+    }
+
+
+    /** Hydrates a saved aggregate without generating events or notifications. */
+    public static Order restore(Long id, Long customerId, Long restaurantId,
+                                List<OrderLine> lines, OrderStatus status,
+                                String rejectionReason, List<StateTransitionRecord> history) {
+        Order order = new Order(id, customerId, restaurantId, lines, false);
+        order.state = switch (status) {
+            case PLACED -> new PlacedState();
+            case ACCEPTED -> new AcceptedState();
+            case PREPARING -> new PreparingState();
+            case READY -> new ReadyState();
+            case REJECTED -> new RejectedState();
+            case CANCELLED -> new CancelledState();
+            default -> throw new IllegalArgumentException("Delivery lifecycle is not implemented: " + status);
+        };
+        order.rejectionReason = rejectionReason;
+        order.transitionHistory.addAll(history);
+        return order;
     }
 
     public Long getOrderId() {

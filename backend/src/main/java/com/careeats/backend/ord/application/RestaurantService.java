@@ -14,8 +14,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 
+@org.springframework.transaction.annotation.Transactional
 public class RestaurantService {
 
     private final RestaurantRepository restaurantRepository;
@@ -41,7 +41,7 @@ public class RestaurantService {
         this.restaurantRepository = restaurantRepository;
         this.userRepo = userRepo;
         this.restaurantAssignments =
-                new HashMap<>(restaurantAssignments);
+                restaurantAssignments;
     }
 
     // Find the currently authenticated user
@@ -122,6 +122,7 @@ public class RestaurantService {
     }
 
     // GET ALL RESTAURANTS
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public List<Restaurant> getAllRestaurants() {
 
         getAuthenticatedUser();
@@ -130,6 +131,7 @@ public class RestaurantService {
     }
 
     // GET ONE RESTAURANT
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Restaurant getRestaurant(Long restaurantId) {
 
         getAuthenticatedUser();
@@ -139,6 +141,7 @@ public class RestaurantService {
 
     // PAUSE RESTAURANT
     public synchronized Restaurant pauseRestaurant(Long restaurantId) {
+        restaurantRepository.lockForWrite();
 
         requireRestaurantManager(restaurantId);
 
@@ -147,12 +150,14 @@ public class RestaurantService {
 
         // Restaurant.java records the status transition
         restaurant.pause();
+        restaurantRepository.save(restaurant);
 
         return restaurant;
     }
 
     // REOPEN RESTAURANT
     public synchronized Restaurant reopenRestaurant(Long restaurantId) {
+        restaurantRepository.lockForWrite();
 
         requireRestaurantManager(restaurantId);
 
@@ -161,6 +166,7 @@ public class RestaurantService {
 
         // Restaurant.java records the status transition
         restaurant.reopen();
+        restaurantRepository.save(restaurant);
 
         return restaurant;
     }

@@ -45,6 +45,15 @@ public class MenuItem {
         this.transitionHistory = new ArrayList<>();
     }
 
+
+    public static MenuItem restore(Long id, String name, BigDecimal price, List<String> ingredients,
+                                   MenuItemStatus status, List<MenuItemTransitionRecord> history) {
+        MenuItem item = new MenuItem(id, name, price, ingredients);
+        item.status = java.util.Objects.requireNonNull(status);
+        item.transitionHistory.addAll(history);
+        return item;
+    }
+
     public Long getItemId() {
         return itemId;
     }

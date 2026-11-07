@@ -7,6 +7,10 @@ import java.util.Map;
 
 public class UserRepo {
 
+    private final java.util.concurrent.atomic.AtomicLong ids = new java.util.concurrent.atomic.AtomicLong(1);
+    public long nextId() { return ids.getAndIncrement(); }
+    public void lockForWrite() { }
+
     private Map<String, User> users = new HashMap<>();
 
     //stores user, and thier email is the key
