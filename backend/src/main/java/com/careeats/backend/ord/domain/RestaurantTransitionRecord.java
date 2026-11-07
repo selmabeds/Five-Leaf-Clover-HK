@@ -11,12 +11,11 @@ public class RestaurantTransitionRecord {
     private final RestaurantStatus newStatus;
     private final LocalDateTime timestamp;
 
-    public RestaurantTransitionRecord(
-            String eventId,
-            Long restaurantId,
-            RestaurantStatus previousStatus,
-            RestaurantStatus newStatus
-    ) {
+    public RestaurantTransitionRecord(String eventId, Long restaurantId, RestaurantStatus previousStatus, RestaurantStatus newStatus) {
+        this(eventId, restaurantId, previousStatus, newStatus, LocalDateTime.now());
+    }
+
+    public RestaurantTransitionRecord(String eventId, Long restaurantId, RestaurantStatus previousStatus, RestaurantStatus newStatus, LocalDateTime timestamp) {
 
         if (eventId == null || eventId.isBlank()) {
             throw new IllegalArgumentException(
@@ -42,7 +41,7 @@ public class RestaurantTransitionRecord {
         this.restaurantId = restaurantId;
         this.previousStatus = previousStatus;
         this.newStatus = newStatus;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = java.util.Objects.requireNonNull(timestamp);
     }
 
     public String getEventId() {

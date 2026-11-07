@@ -13,10 +13,10 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+@org.springframework.transaction.annotation.Transactional
 public class MenuService {
 
     private final RestaurantRepository restaurantRepository;
@@ -42,7 +42,7 @@ public class MenuService {
         this.restaurantRepository = restaurantRepository;
         this.userRepo = userRepo;
         this.restaurantAssignments =
-                new HashMap<>(restaurantAssignments);
+                restaurantAssignments;
     }
 
     // Identify the currently authenticated user
@@ -147,6 +147,7 @@ public class MenuService {
     }
 
     // GET A RESTAURANT'S MENU
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public List<MenuItem> getMenu(Long restaurantId) {
 
         getAuthenticatedUser();
@@ -158,6 +159,7 @@ public class MenuService {
     }
 
     // GET ONE MENU ITEM
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public MenuItem getMenuItem(
             Long restaurantId,
             Long itemId
@@ -176,6 +178,7 @@ public class MenuService {
             Long restaurantId,
             Long itemId
     ) {
+        restaurantRepository.lockForWrite();
 
         requireRestaurantManager(restaurantId);
 
@@ -186,6 +189,7 @@ public class MenuService {
                 requireMenuItem(restaurant, itemId);
 
         item.markSoldOut();
+        restaurantRepository.save(restaurant);
 
         return item;
     }
@@ -195,6 +199,7 @@ public class MenuService {
             Long restaurantId,
             Long itemId
     ) {
+        restaurantRepository.lockForWrite();
 
         requireRestaurantManager(restaurantId);
 
@@ -205,6 +210,7 @@ public class MenuService {
                 requireMenuItem(restaurant, itemId);
 
         item.markAvailable();
+        restaurantRepository.save(restaurant);
 
         return item;
     }
@@ -214,6 +220,7 @@ public class MenuService {
             Long restaurantId,
             MenuItem item
     ) {
+        restaurantRepository.lockForWrite();
 
         requireRestaurantManager(restaurantId);
 
@@ -222,6 +229,7 @@ public class MenuService {
 
         // Restaurant.java validates null and duplicate item IDs
         restaurant.addMenuItem(item);
+        restaurantRepository.save(restaurant);
 
         return item;
     }

@@ -10,6 +10,10 @@ import java.util.Map;
 
 public class LedgerRepository {
 
+    public void lockForWrite() { }
+    public void saveFare(com.careeats.backend.prc.domain.DeliveredOrder order,
+                         com.careeats.backend.prc.domain.FareDecomposition fare) { }
+
     private final Map<Long, List<LedgerEntry>> entriesByOrder =
             new LinkedHashMap<>();
 

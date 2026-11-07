@@ -7,11 +7,11 @@ import com.careeats.backend.reg.infrastructure.UserRepo;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 //to securely store passwords
 
+@org.springframework.transaction.annotation.Transactional
 public class RegistrationService {
 
     private UserRepo userRepo;
     private BCryptPasswordEncoder passwordEncoder;
-    private long nextId = 1L;
 
     public RegistrationService(UserRepo userRepo) {
         this.userRepo = userRepo;
@@ -29,7 +29,7 @@ public class RegistrationService {
             throw new IllegalArgumentException("Email is required");
         }
 
-        email = email.trim().toLowerCase();
+        email = email.trim().toLowerCase(java.util.Locale.ROOT);
 
         if (password == null || password.isBlank()) {
             throw new IllegalArgumentException("Password is required");
@@ -39,7 +39,9 @@ public class RegistrationService {
             throw new IllegalArgumentException("Role is required");
         }
 
-         //two accounts can't have the same email
+         userRepo.lockForWrite();
+
+        //two accounts can't have the same email
         if (userRepo.emailExists(email)) {
             throw new IllegalArgumentException("Email already registered");
         }
@@ -48,7 +50,7 @@ public class RegistrationService {
         String passwordHash = passwordEncoder.encode(password);
 
         //if passes all validation, create a new user
-        User user = new User(nextId++, name, email, passwordHash, role);
+        User user = new User(userRepo.nextId(), name, email, passwordHash, role);
 
         userRepo.save(user);
 
