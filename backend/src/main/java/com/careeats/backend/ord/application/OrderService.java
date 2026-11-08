@@ -395,7 +395,7 @@ public class OrderService {
 
     // RETRIEVE ONE ORDER
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
-    public synchronized Order getOrder(Long orderId) {
+    public Order getOrder(Long orderId) {
 
         User user = getAuthenticatedUser();
         Order order = requireOrder(orderId);
@@ -424,25 +424,16 @@ public class OrderService {
 
     // RETRIEVE CUSTOMER'S ORDERS
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
-    public synchronized List<Order> getCustomerOrders() {
+    public List<Order> getCustomerOrders() {
 
         User customer = requireCustomer();
-        List<Order> customerOrders = new ArrayList<>();
-
-        for (Order order : orderRepository.findAll()) {
-
-            if (order.getCustomerId().equals(customer.getId())) {
-                customerOrders.add(order);
-            }
-        }
-
-        return customerOrders;
+        return orderRepository.findByCustomerId(customer.getId());
     }
 
 
     // Retrive all order of a restaurant
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
-    public synchronized List<Order> getRestaurantOrders(Long restaurantId) {
+    public List<Order> getRestaurantOrders(Long restaurantId) {
 
         // Step 1: Verify restaurant staff authorization
         requireRestaurantStaff(restaurantId);
@@ -455,20 +446,7 @@ public class OrderService {
             );
         }
 
-        // Step 3: Create a list for the restaurant's orders
-        List<Order> restaurantOrders = new ArrayList<>();
-
-        // Step 4: Search all stored orders
-        for (Order order : orderRepository.findAll()) {
-
-            // Include only orders belonging to this restaurant
-            if (order.getRestaurantId().equals(restaurantId)) {
-                restaurantOrders.add(order);
-            }
-        }
-
-        // Step 5: Return the matching orders
-        return restaurantOrders;
+        return orderRepository.findByRestaurantId(restaurantId);
     }
 
 }

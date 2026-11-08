@@ -16,23 +16,48 @@ public class JdbcOrderRepository extends OrderRepository {
         return jdbc.queryForObject("SELECT COUNT(*) FROM careeats.orders WHERE id=?",Long.class,id)>0;
     }
     @Override public Order findById(Long id) {
-        return jdbc.query("SELECT * FROM careeats.orders WHERE id=?",(rs,n) -> {
-            List<OrderLine> lines=jdbc.query("SELECT item_id,quantity FROM careeats.order_lines WHERE order_id=? ORDER BY position",
-                (r,i) -> new OrderLine(r.getLong(1),r.getInt(2)),id);
-            List<StateTransitionRecord> history=jdbc.query("SELECT * FROM careeats.order_transitions WHERE order_id=? ORDER BY position",
-                (r,i) -> new StateTransitionRecord(r.getString("event_id"),id,
-                    r.getString("previous_status")==null?null:OrderStatus.valueOf(r.getString("previous_status")),
-                    OrderStatus.valueOf(r.getString("new_status")),r.getTimestamp("occurred_at").toLocalDateTime()),id);
-            return Order.restore(id,rs.getLong("customer_id"),rs.getLong("restaurant_id"),lines,
-                OrderStatus.valueOf(rs.getString("status")),rs.getString("rejection_reason"),history);
-        },id).stream().findFirst().orElse(null);
+        return readOrders("o.id=?", "o.id", id).stream().findFirst().orElse(null);
     }
     @Override public List<Order> findAll() {
-        return jdbc.queryForList("SELECT id FROM careeats.orders ORDER BY id",Long.class).stream().map(this::findById).toList();
+        return readOrders("1=1", "o.id");
+    }
+    @Override public List<Order> findByCustomerId(Long customerId) {
+        return readOrders("o.customer_id=?", "o.id", customerId);
+    }
+    @Override public List<Order> findByRestaurantId(Long restaurantId) {
+        return readOrders("o.restaurant_id=?", "o.id", restaurantId);
     }
     @Override public List<Order> findAcceptedForRestaurant(Long restaurantId) {
-        return jdbc.queryForList("SELECT id FROM careeats.orders WHERE restaurant_id=? AND status='ACCEPTED' ORDER BY accepted_sequence",
-            Long.class,restaurantId).stream().map(this::findById).toList();
+        return readOrders("o.restaurant_id=? AND o.status='ACCEPTED'", "o.accepted_sequence", restaurantId);
+    }
+
+    private record OrderRow(long id, long customerId, long restaurantId, OrderStatus status, String reason) { }
+
+    /** Three queries per result set, independent of the number of orders returned. */
+    private List<Order> readOrders(String condition, String ordering, Object... args) {
+        List<OrderRow> rows = jdbc.query("SELECT o.* FROM careeats.orders o WHERE " + condition + " ORDER BY " + ordering,
+            (rs,n) -> new OrderRow(rs.getLong("id"), rs.getLong("customer_id"), rs.getLong("restaurant_id"),
+                OrderStatus.valueOf(rs.getString("status")), rs.getString("rejection_reason")), args);
+        if (rows.isEmpty()) return List.of();
+
+        Map<Long,List<OrderLine>> lines = new HashMap<>();
+        jdbc.query("SELECT l.* FROM careeats.order_lines l JOIN careeats.orders o ON o.id=l.order_id WHERE "
+            + condition + " ORDER BY l.order_id,l.position", rs -> {
+                lines.computeIfAbsent(rs.getLong("order_id"), ignored -> new ArrayList<>())
+                    .add(new OrderLine(rs.getLong("item_id"),rs.getInt("quantity")));
+            }, args);
+        Map<Long,List<StateTransitionRecord>> histories = new HashMap<>();
+        jdbc.query("SELECT t.* FROM careeats.order_transitions t JOIN careeats.orders o ON o.id=t.order_id WHERE "
+            + condition + " ORDER BY t.order_id,t.position", rs -> {
+                long id = rs.getLong("order_id");
+                histories.computeIfAbsent(id, ignored -> new ArrayList<>()).add(new StateTransitionRecord(
+                    rs.getString("event_id"), id,
+                    rs.getString("previous_status")==null ? null : OrderStatus.valueOf(rs.getString("previous_status")),
+                    OrderStatus.valueOf(rs.getString("new_status")),rs.getTimestamp("occurred_at").toLocalDateTime()));
+            }, args);
+        return rows.stream().map(row -> Order.restore(row.id(), row.customerId(), row.restaurantId(),
+            lines.getOrDefault(row.id(), List.of()), row.status(), row.reason(),
+            histories.getOrDefault(row.id(), List.of()))).toList();
     }
     @Override public void save(Order order) {
         if(order==null) throw new IllegalArgumentException("Order cannot be null");

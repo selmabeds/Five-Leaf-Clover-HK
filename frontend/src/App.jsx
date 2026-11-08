@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 function App() {
@@ -39,6 +39,10 @@ const categories = [
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('restaurants');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [pendingAction, setPendingAction] = useState(null);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const actionInFlight = useRef(false);
+  const orderLoadInFlight = useRef(null);
 
     useEffect(() => {
     if (loggedIn) {
@@ -157,26 +161,37 @@ const categories = [
   }
 
   async function loadRestaurantOrders() {
-    try {
-      const response = await fetch('/api/restaurants/1/orders', {
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error(await response.text());
+    if (orderLoadInFlight.current) return orderLoadInFlight.current;
+    setOrdersLoading(true);
+    const request = (async () => {
+      try {
+        const response = await fetch('/api/restaurants/1/orders', { credentials: 'include' });
+        if (!response.ok) throw new Error(await response.text());
+        setOrders(await response.json());
+        addLog('Restaurant orders loaded');
+      } catch (error) {
+        addLog('Error loading orders: ' + error.message);
+        setMessage(error.message);
+      } finally {
+        setOrdersLoading(false);
       }
-
-      const data = await response.json();
-      setOrders(data);
-      addLog('Restaurant orders loaded');
-    } catch (error) {
-      addLog('Error loading orders: ' + error.message);
-      setMessage(error.message);
+    })();
+    orderLoadInFlight.current = request;
+    try {
+      await request;
+    } finally {
+      if (orderLoadInFlight.current === request) orderLoadInFlight.current = null;
     }
   }
 
   async function runOrderAction(url, action) {
+    // The ref also blocks clicks arriving before React renders the disabled buttons.
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setPendingAction(action);
+    setMessage(action + ' in progress...');
     try {
+      if (orderLoadInFlight.current) await orderLoadInFlight.current;
       const csrfToken = await getCsrfToken();
 
       const response = await fetch(url, {
@@ -197,6 +212,7 @@ const categories = [
 
       const order = await response.json();
 
+      setOrders(previous => previous.map(existing => existing.orderId === order.orderId ? order : existing));
       addLog(action + ' successful: Order #' + order.orderId);
       setMessage(action + ' successful');
 
@@ -204,6 +220,9 @@ const categories = [
     } catch (error) {
       addLog(action + ' failed: ' + error.message);
       setMessage(action + ' failed: ' + error.message);
+    } finally {
+      actionInFlight.current = false;
+      setPendingAction(null);
     }
   }
 
@@ -413,14 +432,16 @@ const categories = [
           )}
 
          {activeTab === 'orders' && (
-            <section>
+            <section aria-busy={ordersLoading || pendingAction !== null}>
               <h3>Restaurant Orders</h3>
+              {pendingAction && <p role="status">{pendingAction} in progress...</p>}
 
               <button
                 type="button"
+                disabled={ordersLoading || pendingAction !== null}
                 onClick={loadRestaurantOrders}
               >
-                Refresh Orders
+                {ordersLoading ? 'Loading orders...' : 'Refresh Orders'}
               </button>
 
               {orders.map(order => (
@@ -433,6 +454,7 @@ const categories = [
                     <>
                       <button
                         type="button"
+                        disabled={ordersLoading || pendingAction !== null}
                         onClick={() =>
                           runOrderAction(
                             `/api/orders/${order.orderId}/accept`,
@@ -445,6 +467,7 @@ const categories = [
 
                       <button
                         type="button"
+                        disabled={ordersLoading || pendingAction !== null}
                         onClick={() =>
                           runOrderAction(
                             `/api/orders/${order.orderId}/reject`,
@@ -460,6 +483,7 @@ const categories = [
                   {order.status === 'ACCEPTED' && (
                     <button
                       type="button"
+                      disabled={ordersLoading || pendingAction !== null}
                       onClick={() =>
                         runOrderAction(
                           `/api/restaurants/${order.restaurantId}/start-next`,
@@ -474,6 +498,7 @@ const categories = [
                   {order.status === 'PREPARING' && (
                     <button
                       type="button"
+                      disabled={ordersLoading || pendingAction !== null}
                       onClick={() =>
                         runOrderAction(
                           `/api/orders/${order.orderId}/ready`,

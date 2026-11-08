@@ -38,6 +38,14 @@ public class OrderRepository {
         return orders.get(orderId);
     }
 
+    public List<Order> findByCustomerId(Long customerId) {
+        return findAll().stream().filter(order -> order.getCustomerId().equals(customerId)).toList();
+    }
+
+    public List<Order> findByRestaurantId(Long restaurantId) {
+        return findAll().stream().filter(order -> order.getRestaurantId().equals(restaurantId)).toList();
+    }
+
     public List<Order> findAll() {
         return new ArrayList<>(orders.values());
     }

@@ -15,35 +15,52 @@ public class JdbcRestaurantRepository extends RestaurantRepository {
         return jdbc.queryForObject("SELECT COUNT(*) FROM careeats.restaurants WHERE id=?",Long.class,id)>0;
     }
     @Override public Restaurant findById(Long id) {
-        return jdbc.query("SELECT * FROM careeats.restaurants WHERE id=?",(rs,n) -> Restaurant.restore(
-            id,rs.getString("name"),rs.getDouble("latitude"),rs.getDouble("longitude"),
-            RestaurantStatus.valueOf(rs.getString("status")),items(id),restaurantHistory(id)),id)
-            .stream().findFirst().orElse(null);
+        if (id == null) return null;
+        return readRestaurants(id).stream().findFirst().orElse(null);
     }
-    @Override public List<Restaurant> findAll() {
-        return jdbc.queryForList("SELECT id FROM careeats.restaurants ORDER BY id",Long.class)
-            .stream().map(this::findById).toList();
-    }
-    private List<MenuItem> items(Long restaurantId) {
-        return jdbc.query("SELECT * FROM careeats.menu_items WHERE restaurant_id=? ORDER BY position",(rs,n) -> {
-            long itemId=rs.getLong("item_id");
-            List<String> ingredients=jdbc.queryForList(
-                "SELECT ingredient FROM careeats.menu_ingredients WHERE restaurant_id=? AND item_id=? ORDER BY position",
-                String.class,restaurantId,itemId);
-            List<MenuItemTransitionRecord> history=jdbc.query(
-                "SELECT * FROM careeats.menu_transitions WHERE restaurant_id=? AND item_id=? ORDER BY position",
-                (r,i) -> new MenuItemTransitionRecord(r.getString("event_id"),itemId,
-                    MenuItemStatus.valueOf(r.getString("previous_status")),MenuItemStatus.valueOf(r.getString("new_status")),
-                    r.getTimestamp("occurred_at").toLocalDateTime()),restaurantId,itemId);
-            return MenuItem.restore(itemId,rs.getString("name"),rs.getBigDecimal("price"),ingredients,
-                MenuItemStatus.valueOf(rs.getString("status")),history);
-        },restaurantId);
-    }
-    private List<RestaurantTransitionRecord> restaurantHistory(Long id) {
-        return jdbc.query("SELECT * FROM careeats.restaurant_transitions WHERE restaurant_id=? ORDER BY position",
-            (r,n) -> new RestaurantTransitionRecord(r.getString("event_id"),id,
-                RestaurantStatus.valueOf(r.getString("previous_status")),RestaurantStatus.valueOf(r.getString("new_status")),
-                r.getTimestamp("occurred_at").toLocalDateTime()),id);
+    @Override public List<Restaurant> findAll() { return readRestaurants(null); }
+
+    private record RestaurantRow(long id, String name, double latitude, double longitude, RestaurantStatus status) { }
+    private record ItemKey(long restaurantId, long itemId) { }
+
+    /** Load the catalog in five queries rather than querying inside each row mapper. */
+    private List<Restaurant> readRestaurants(Long id) {
+        Object[] args = id == null ? new Object[0] : new Object[]{id};
+        String headerWhere = id == null ? "" : " WHERE id=?";
+        String childWhere = id == null ? "" : " WHERE restaurant_id=?";
+        List<RestaurantRow> rows = jdbc.query("SELECT * FROM careeats.restaurants" + headerWhere + " ORDER BY id",
+            (rs,n) -> new RestaurantRow(rs.getLong("id"),rs.getString("name"),rs.getDouble("latitude"),
+                rs.getDouble("longitude"),RestaurantStatus.valueOf(rs.getString("status"))),args);
+        if (rows.isEmpty()) return List.of();
+
+        Map<ItemKey,List<String>> ingredients = new HashMap<>();
+        jdbc.query("SELECT * FROM careeats.menu_ingredients" + childWhere + " ORDER BY restaurant_id,item_id,position", rs -> {
+            ItemKey key = new ItemKey(rs.getLong("restaurant_id"),rs.getLong("item_id"));
+            ingredients.computeIfAbsent(key, ignored -> new ArrayList<>()).add(rs.getString("ingredient"));
+        },args);
+        Map<ItemKey,List<MenuItemTransitionRecord>> itemHistories = new HashMap<>();
+        jdbc.query("SELECT * FROM careeats.menu_transitions" + childWhere + " ORDER BY restaurant_id,item_id,position",rs -> {
+            ItemKey key = new ItemKey(rs.getLong("restaurant_id"),rs.getLong("item_id"));
+            itemHistories.computeIfAbsent(key, ignored -> new ArrayList<>()).add(new MenuItemTransitionRecord(
+                rs.getString("event_id"), key.itemId(), MenuItemStatus.valueOf(rs.getString("previous_status")),
+                MenuItemStatus.valueOf(rs.getString("new_status")),rs.getTimestamp("occurred_at").toLocalDateTime()));
+        },args);
+        Map<Long,List<MenuItem>> items = new HashMap<>();
+        jdbc.query("SELECT * FROM careeats.menu_items" + childWhere + " ORDER BY restaurant_id,position",rs -> {
+            ItemKey key = new ItemKey(rs.getLong("restaurant_id"),rs.getLong("item_id"));
+            items.computeIfAbsent(key.restaurantId(),ignored -> new ArrayList<>()).add(MenuItem.restore(
+                key.itemId(),rs.getString("name"),rs.getBigDecimal("price"),ingredients.getOrDefault(key,List.of()),
+                MenuItemStatus.valueOf(rs.getString("status")),itemHistories.getOrDefault(key,List.of())));
+        },args);
+        Map<Long,List<RestaurantTransitionRecord>> histories = new HashMap<>();
+        jdbc.query("SELECT * FROM careeats.restaurant_transitions" + childWhere + " ORDER BY restaurant_id,position",rs -> {
+            long restaurantId = rs.getLong("restaurant_id");
+            histories.computeIfAbsent(restaurantId,ignored -> new ArrayList<>()).add(new RestaurantTransitionRecord(
+                rs.getString("event_id"),restaurantId,RestaurantStatus.valueOf(rs.getString("previous_status")),
+                RestaurantStatus.valueOf(rs.getString("new_status")),rs.getTimestamp("occurred_at").toLocalDateTime()));
+        },args);
+        return rows.stream().map(row -> Restaurant.restore(row.id(),row.name(),row.latitude(),row.longitude(),row.status(),
+            items.getOrDefault(row.id(),List.of()),histories.getOrDefault(row.id(),List.of()))).toList();
     }
     @Override public void save(Restaurant restaurant) {
         if (restaurant==null) throw new IllegalArgumentException("Restaurant cannot be null");

@@ -39,7 +39,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 /** Real, disposable local PostgreSQL. No Supabase credentials or Docker required. */
 @ActiveProfiles("test")
-@SpringBootTest(properties = {"careeats.seed.enabled=true", "spring.flyway.enabled=true"})
+@SpringBootTest(properties = {"careeats.seed.enabled=true", "spring.flyway.enabled=true",
+    "spring.datasource.hikari.maximum-pool-size=3"})
 class PostgresPersistenceTest {
     private static EmbeddedPostgres postgres;
 
@@ -84,6 +85,7 @@ class PostgresPersistenceTest {
     @Autowired DemoDataLoader seeder;
     @Autowired PlatformTransactionManager transactions;
     @Autowired WebApplicationContext web;
+    @Autowired javax.sql.DataSource dataSource;
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
@@ -96,6 +98,99 @@ class PostgresPersistenceTest {
     }
 
     private TransactionTemplate tx() { return new TransactionTemplate(transactions); }
+
+    @Test void listsUseBoundedQueriesAndFilterOrdersInDatabase() {
+        CountingDataSource counting = new CountingDataSource(dataSource);
+        JdbcOrderRepository batched = new JdbcOrderRepository(new JdbcTemplate(counting));
+        assertTrue(batched.findAll().size() >= 84);
+        assertEquals(3, counting.statements.get(), "Order count must not increase the query count");
+
+        counting.statements.set(0);
+        var restaurantOrders = batched.findByRestaurantId(5L);
+        assertEquals(6, restaurantOrders.size());
+        assertTrue(restaurantOrders.stream().allMatch(order -> order.getRestaurantId().equals(5L)));
+        assertEquals(3, counting.statements.get());
+
+        counting.statements.set(0);
+        var customerOrders = batched.findByCustomerId(100L);
+        assertFalse(customerOrders.isEmpty());
+        assertTrue(customerOrders.stream().allMatch(order -> order.getCustomerId().equals(100L)));
+        assertEquals(3, counting.statements.get());
+
+        counting.statements.set(0);
+        var catalog = new JdbcRestaurantRepository(new JdbcTemplate(counting)).findAll();
+        assertEquals(14, catalog.size());
+        assertEquals(37, catalog.stream().mapToInt(restaurant -> restaurant.getMenuItems().size()).sum());
+        assertEquals(5, counting.statements.get(), "Menu and history queries must be batched across restaurants");
+        var cake = catalog.stream().filter(restaurant -> restaurant.getRestaurantId().equals(2L))
+            .findFirst().orElseThrow().getMenuItems().stream().filter(item -> item.getItemId().equals(5L))
+            .findFirst().orElseThrow();
+        assertEquals(MenuItemStatus.SOLD_OUT, cake.getStatus());
+        assertEquals(List.of("Chocolate", "Eggs", "Butter"), cake.getIngredients());
+        assertFalse(cake.getTransitionHistory().isEmpty());
+    }
+
+    @Test void slowCustomerReadDoesNotBlockRestaurantReadWhileHoldingPoolConnections() throws Exception {
+        CountDownLatch reading = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        OrderRepository slow = new OrderRepository() {
+            @Override public List<Order> findByCustomerId(Long id) {
+                reading.countDown();
+                try {
+                    if (!release.await(15, TimeUnit.SECONDS)) throw new IllegalStateException("Test read was not released");
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(interrupted);
+                }
+                return orders.findByCustomerId(id);
+            }
+            @Override public List<Order> findByRestaurantId(Long id) { return orders.findByRestaurantId(id); }
+        };
+        OrderService sameService = new OrderService(slow, restaurants, users, new JdbcRestaurantAssignments(jdbc));
+        ExecutorService workers = Executors.newFixedThreadPool(2);
+        try {
+            Future<List<Order>> customer = workers.submit(() -> {
+                login("customer1@example.test");
+                try { return tx().execute(status -> sameService.getCustomerOrders()); }
+                finally { SecurityContextHolder.clearContext(); }
+            });
+            assertTrue(reading.await(5, TimeUnit.SECONDS));
+            Future<List<Order>> manager = workers.submit(() -> {
+                login("restaurant@careeats.com");
+                try { return tx().execute(status -> sameService.getRestaurantOrders(1L)); }
+                finally { SecurityContextHolder.clearContext(); }
+            });
+            assertFalse(manager.get(5, TimeUnit.SECONDS).isEmpty(),
+                "Independent reads must finish even while another request is waiting");
+            release.countDown();
+            assertFalse(customer.get(5, TimeUnit.SECONDS).isEmpty());
+        } finally {
+            release.countDown();
+            workers.shutdownNow();
+        }
+    }
+
+    private static final class CountingDataSource extends org.springframework.jdbc.datasource.AbstractDataSource {
+        private final javax.sql.DataSource delegate;
+        private final java.util.concurrent.atomic.AtomicInteger statements = new java.util.concurrent.atomic.AtomicInteger();
+        private CountingDataSource(javax.sql.DataSource delegate) { this.delegate = delegate; }
+        @Override public java.sql.Connection getConnection() throws java.sql.SQLException {
+            return count(delegate.getConnection());
+        }
+        @Override public java.sql.Connection getConnection(String username, String password) throws java.sql.SQLException {
+            return count(delegate.getConnection(username, password));
+        }
+        private java.sql.Connection count(java.sql.Connection connection) {
+            return (java.sql.Connection) java.lang.reflect.Proxy.newProxyInstance(
+                java.sql.Connection.class.getClassLoader(), new Class<?>[]{java.sql.Connection.class}, (proxy, method, args) -> {
+                    if (method.getName().equals("prepareStatement") || method.getName().equals("createStatement")) {
+                        statements.incrementAndGet();
+                    }
+                    try { return method.invoke(connection, args); }
+                    catch (java.lang.reflect.InvocationTargetException error) { throw error.getCause(); }
+                });
+        }
+    }
 
     @Test void existingSessionLoginAndOrderJsonRemainCompatible() throws Exception {
         var mvc = MockMvcBuilders.webAppContextSetup(web).apply(springSecurity()).build();
