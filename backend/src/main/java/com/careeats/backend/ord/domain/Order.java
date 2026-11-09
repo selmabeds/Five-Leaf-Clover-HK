@@ -73,6 +73,8 @@ public class Order {
             case READY -> new ReadyState();
             case REJECTED -> new RejectedState();
             case CANCELLED -> new CancelledState();
+            case PICKED_UP -> new PickedUpState();
+            case DELIVERED -> new DeliveredState();
             default -> throw new IllegalArgumentException("Delivery lifecycle is not implemented: " + status);
         };
         order.rejectionReason = rejectionReason;
@@ -133,6 +135,13 @@ void startPreparing() {
 
 public void markReady() {
     changeState(state.markReady());
+}
+public void pickUp() {
+    changeState(state.pickUp());
+}
+
+public void deliver() {
+    changeState(state.deliver());
 }
 
 public void reject(String reason) {

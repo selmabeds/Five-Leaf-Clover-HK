@@ -39,4 +39,13 @@ public interface OrderState {
             "Cannot cancel order by operator in the following status: " + getStatus()
         );
     }
+    default OrderState pickUp() {
+    throw new IllegalStateException(
+            "Cannot pick up order in status " + getStatus());
+}
+
+default OrderState deliver() {
+    throw new IllegalStateException(
+            "Cannot deliver order in status " + getStatus());
+}
 }

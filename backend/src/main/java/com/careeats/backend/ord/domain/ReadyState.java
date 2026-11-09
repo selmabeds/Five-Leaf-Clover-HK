@@ -7,4 +7,8 @@ public class ReadyState implements OrderState {
     public OrderStatus getStatus() {
         return OrderStatus.READY;
     }
+    @Override
+public OrderState pickUp() {
+    return new PickedUpState();
+}
 }
