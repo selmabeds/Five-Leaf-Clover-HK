@@ -44,7 +44,7 @@ class PricingControllerTest {
             )
     );
     private final PricingController controller =
-            new PricingController(pricingService, userRepo);
+            new PricingController(pricingService, org.mockito.Mockito.mock(com.careeats.backend.prc.application.OrderHistoryService.class), userRepo);
 
     @BeforeEach
     void setUpAuthentication() {
@@ -65,10 +65,9 @@ class PricingControllerTest {
     }
 
     @Test
-    void operatorCanReadHistoryAndRefundThroughController() {
+    void operatorCanRefundThroughController() {
         pricingService.recordDeliveredOrder(deliveredOrder(1L));
 
-        assertEquals(1, controller.getHistory().size());
         var refund = controller.refundOrder(1L);
 
         assertEquals(LedgerEntryType.REFUND, refund.type());

@@ -47,7 +47,8 @@ public class PricingService {
     }
 
     // Calculates the final fare and records the charge after delivery
-    public synchronized OrderSummary recordDeliveredOrder(
+    // Record the delivery information, such as the delivery details and charge.
+    public OrderSummary recordDeliveredOrder(
             DeliveredOrder deliveredOrder) {
 
         ledgerRepository.lockForWrite();
@@ -91,7 +92,8 @@ public class PricingService {
     }
 
     // Records an operator-authorized refund as a separate ledger entry
-    public synchronized LedgerEntry refundDeliveredOrder(
+    // Since we made the design choice of having the refund be a separate entry with the same order ID, we preserve the original charge instead of overwriting it.
+    public LedgerEntry refundDeliveredOrder(
             User operator,
             Long orderId) {
 
@@ -138,7 +140,7 @@ public class PricingService {
 
     // Returns only the ledger entries visible to the user's role
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
-    public synchronized List<LedgerEntry> historyFor(User user) {
+    public List<LedgerEntry> historyFor(User user) {
         Objects.requireNonNull(user, "User is needed");
         Objects.requireNonNull(user.getId(), "User ID is needed");
         Objects.requireNonNull(user.getRole(), "User role is needed");

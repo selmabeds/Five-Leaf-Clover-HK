@@ -16,6 +16,7 @@ public class DatabaseStartupCheck implements ApplicationRunner {
     @Override public void run(ApplicationArguments args) {
         try {
             jdbc.queryForObject("SELECT id FROM careeats.write_lock WHERE id=1", Integer.class);
+            jdbc.queryForList("SELECT item_name FROM careeats.order_lines WHERE 1=0");
             for (String table : new String[]{"app_users", "restaurants", "restaurant_assignments", "menu_items",
                     "menu_ingredients", "orders", "order_lines", "order_transitions", "restaurant_transitions",
                     "menu_transitions", "delivered_orders", "ledger_entries", "fare_snapshots", "priced_lines", "seed_runs"}) {

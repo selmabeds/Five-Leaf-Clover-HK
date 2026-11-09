@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import './App.css';
+import PrcConsole from './prc/PrcConsole';
 
 function App() {
   const restaurantCategories = {
@@ -31,6 +32,7 @@ const categories = [
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
   const [loggedIn, setLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [logs, setLogs] = useState([]);
   const [restaurants, setRestaurants] = useState([]);
   const [menu, setMenu] = useState([]);
@@ -247,6 +249,10 @@ const categories = [
       });
 
       if (response.ok) {
+        const contextResponse = await fetch('/api/prc/context', { credentials: 'include' });
+        if (!contextResponse.ok) throw new Error('Cannot load the authenticated user');
+        setCurrentUser(await contextResponse.json());
+        setLogs([]);
         setLoggedIn(true);
         setActiveTab('restaurants');
         addLog('Login successful: ' + email);
@@ -279,6 +285,8 @@ const categories = [
       if (response.ok) {
         addLog('Logout successful: ' + email);
         setLoggedIn(false);
+        setCurrentUser(null);
+        setLogs([]);
         setPassword('');
         setRestaurants([]);
         setMenu([]);
@@ -514,16 +522,9 @@ const categories = [
             </section>
           )}
 
-          {activeTab === 'logs' && (
-            <section>
-              <h3>Activity Log</h3>
-
-              <div className="activity-log">
-                {logs.map((log, index) => (
-                  <p key={index}>{log}</p>
-                ))}
-              </div>
-            </section>
+          {activeTab === 'logs' && currentUser && (
+            <PrcConsole key={currentUser.userId} user={currentUser} logs={logs}
+              addLog={addLog} getCsrfToken={getCsrfToken} />
           )}
 
           <p role="status">{message}</p>
