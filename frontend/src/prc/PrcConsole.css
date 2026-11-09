@@ -1,0 +1,6 @@
+.prc-controls { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 16px 0; }
+.prc-controls label { display: flex; flex-direction: column; gap: 6px; font-size: 14px; }
+.prc-controls select { max-width: 100%; padding: 10px; border: 1px solid #ded7cf; border-radius: 8px; background: #f8f6f2; color: #493f3a; }
+.prc-controls button:disabled { opacity: .5; cursor: wait; }
+.prc-output { max-height: 540px; overflow-y: auto; border: 1px solid #ded7cf; border-radius: 12px; padding: 16px; background: #f0ece7; }
+.prc-output pre { white-space: pre-wrap; overflow-wrap: anywhere; font-family: ui-monospace, monospace; font-size: 13px; line-height: 1.6; border-bottom: 1px solid #ded7cf; padding-bottom: 12px; }
