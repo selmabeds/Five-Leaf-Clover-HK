@@ -175,37 +175,97 @@ const categories = [
     }
   }
 
-  async function runOrderAction(url, action) {
-    try {
-      const csrfToken = await getCsrfToken();
+async function runOrderAction(url, action, rejectionReason = null) {
+  try {
+    const csrfToken = await getCsrfToken();
 
-      const response = await fetch(url, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken
-        },
-        ...(action === 'Reject'
-          ? { body: JSON.stringify({ reason: 'Rejected by restaurant' }) }
-          : {})
-      });
+    const response = await fetch(url, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': csrfToken
+      },
+      ...(action === 'Reject'
+        ? { body: JSON.stringify({ reason: rejectionReason }) }
+        : {})
+    });
 
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
 
-      const order = await response.json();
+    const order = await response.json();
 
-      addLog(action + ' successful: Order #' + order.orderId);
-      setMessage(action + ' successful');
+    addLog(action + ' successful: Order #' + order.orderId);
+    setMessage(action + ' successful');
 
-      await loadRestaurantOrders();
-    } catch (error) {
-      addLog(action + ' failed: ' + error.message);
-      setMessage(action + ' failed: ' + error.message);
+    await loadRestaurantOrders();
+  } catch (error) {
+    addLog(action + ' failed: ' + error.message);
+    setMessage(action + ' failed: ' + error.message);
+  }
+}
+
+async function handleReject(orderId) {
+  const reason = window.prompt(
+    'Please enter a reason for rejecting this order:'
+  );
+
+  if (reason === null) {
+    return;
+  }
+
+  if (!reason.trim()) {
+    setMessage('A rejection reason is required.');
+    return;
+  }
+
+  await runOrderAction(
+    `/api/orders/${orderId}/reject`,
+    'Reject',
+    reason.trim()
+  );
+}
+ 
+
+async function handleStartPreparation(order) {
+  const acceptedOrders = orders
+    .filter(
+      (o) =>
+        o.status === 'ACCEPTED' &&
+        o.restaurantId === order.restaurantId
+    )
+    .sort((a, b) => a.orderId - b.orderId);
+
+  if (acceptedOrders.length === 0) {
+    setMessage('No accepted orders waiting.');
+    return;
+  }
+
+  const nextOrder = acceptedOrders[0];
+
+  if (nextOrder.orderId !== order.orderId) {
+    const confirmed = window.confirm(
+      `Order Queue Warning!\n\n` +
+      `You selected Order #${order.orderId}, ` +
+      `but Order #${nextOrder.orderId} is next in the queue.\n\n` +
+      `Order #${nextOrder.orderId} needs to be prepared first.\n\n` +
+      `Do you want to start Order #${nextOrder.orderId} instead?`
+    );
+
+    if (!confirmed) {
+      return;
     }
   }
+
+  await runOrderAction(
+    `/api/restaurants/${order.restaurantId}/start-next`,
+    'Start Preparation'
+  );
+}
+
+
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -429,47 +489,39 @@ const categories = [
                     Order #{order.orderId} — {order.status}
                   </p>
 
-                  {order.status === 'PLACED' && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          runOrderAction(
-                            `/api/orders/${order.orderId}/accept`,
-                            'Accept'
-                          )
-                        }
-                      >
-                        Accept
-                      </button>
+                 {order.status === 'PLACED' && (
+                   <>
+                  <button
+                    type="button"
+                    onClick={() =>
+                    runOrderAction(
+                    `/api/orders/${order.orderId}/accept`,
+                    'Accept'
+                    )
+                   }
+                   >
+                      Accept
+                   </button>
 
-                      <button
-                        type="button"
-                        onClick={() =>
-                          runOrderAction(
-                            `/api/orders/${order.orderId}/reject`,
-                            'Reject'
-                          )
-                        }
-                      >
-                        Reject
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                   onClick={() => handleReject(order.orderId)}
+                     >
+                     Reject
+                     </button>
+                      </>
+                      )}
 
-                  {order.status === 'ACCEPTED' && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        runOrderAction(
-                          `/api/restaurants/${order.restaurantId}/start-next`,
-                          'Start Preparation'
-                        )
-                      }
-                    >
-                      Start Preparation
-                    </button>
-                  )}
+                      
+
+                {order.status === 'ACCEPTED' && (
+                <button
+                 type="button"
+                 onClick={() => handleStartPreparation(order)}
+                   >
+                   Start Preparation
+                 </button>
+                   )}
 
                   {order.status === 'PREPARING' && (
                     <button
