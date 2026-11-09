@@ -57,6 +57,16 @@ public class Restaurant {
         this.transitionHistory = new ArrayList<>();
     }
 
+
+    public static Restaurant restore(Long id, String name, double latitude, double longitude,
+                                     RestaurantStatus status, List<MenuItem> items,
+                                     List<RestaurantTransitionRecord> history) {
+        Restaurant restaurant = new Restaurant(id, name, latitude, longitude, status);
+        items.forEach(restaurant::addMenuItem);
+        restaurant.transitionHistory.addAll(history);
+        return restaurant;
+    }
+
     public Long getRestaurantId() {
         return restaurantId;
     }

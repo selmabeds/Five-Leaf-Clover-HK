@@ -36,7 +36,8 @@ class PricingServiceTest {
             Clock.fixed(
                     Instant.parse("2026-11-02T18:31:00Z"),
                     ZoneOffset.UTC
-            )
+            ),
+            java.util.Map.of(20L, 20L, 21L, 21L)
     );
 
     @Test

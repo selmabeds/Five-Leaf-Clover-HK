@@ -11,12 +11,11 @@ public class MenuItemTransitionRecord {
     private final MenuItemStatus newStatus;
     private final LocalDateTime timestamp;
 
-    public MenuItemTransitionRecord(
-            String eventId,
-            Long menuItemId,
-            MenuItemStatus previousStatus,
-            MenuItemStatus newStatus
-    ) {
+    public MenuItemTransitionRecord(String eventId, Long menuItemId, MenuItemStatus previousStatus, MenuItemStatus newStatus) {
+        this(eventId, menuItemId, previousStatus, newStatus, LocalDateTime.now());
+    }
+
+    public MenuItemTransitionRecord(String eventId, Long menuItemId, MenuItemStatus previousStatus, MenuItemStatus newStatus, LocalDateTime timestamp) {
 
         if (eventId == null || eventId.isBlank()) {
             throw new IllegalArgumentException(
@@ -42,7 +41,7 @@ public class MenuItemTransitionRecord {
         this.menuItemId = menuItemId;
         this.previousStatus = previousStatus;
         this.newStatus = newStatus;
-        this.timestamp = LocalDateTime.now();
+        this.timestamp = java.util.Objects.requireNonNull(timestamp);
     }
 
     public String getEventId() {

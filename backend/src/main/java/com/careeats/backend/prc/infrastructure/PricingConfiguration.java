@@ -40,20 +40,22 @@ public class PricingConfiguration {
 
     // Creates the ledger used to store charges and refunds
     @Bean
-    public LedgerRepository ledgerRepository() {
-        return new LedgerRepository();
+    public LedgerRepository ledgerRepository(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.careeats.backend.persistence.JdbcLedgerRepository(jdbc);
     }
 
     // Creates the pricing service with the pricing setup reuqirements
     @Bean
     public PricingService pricingService(
             PricingCalculator pricingCalculator,
-            LedgerRepository ledgerRepository) {
+            LedgerRepository ledgerRepository,
+            java.util.Map<Long, Long> restaurantAssignments) {
 
         return new PricingService(
                 pricingCalculator,
                 ledgerRepository,
-                Clock.systemUTC()
+                Clock.systemUTC(),
+                restaurantAssignments
         );
     }
 }
