@@ -14,8 +14,8 @@ import com.careeats.backend.reg.application.RegistrationService;
 public class SecurityConfiguration {
 
     @Bean
-    public UserRepo userRepo() {
-        return new UserRepo();
+    public UserRepo userRepo(org.springframework.jdbc.core.JdbcTemplate jdbc) {
+        return new com.careeats.backend.persistence.JdbcUserRepository(jdbc);
     }
 
     @Bean

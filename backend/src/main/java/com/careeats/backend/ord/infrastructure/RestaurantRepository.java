@@ -10,6 +10,8 @@ import java.util.Map;
 
 public class RestaurantRepository {
 
+    public void lockForWrite() { }
+
     private final Map<Long, Restaurant> restaurants = new HashMap<>();
 
     public void save(Restaurant restaurant) {
