@@ -170,9 +170,21 @@ class PostgresPersistenceTest {
             Instant placed = Instant.parse("2026-11-01T12:00:00Z");
             pricing.recordDeliveredOrder(new DeliveredOrder(order.getOrderId(), 1L, 1L, 3L,
                 List.of(new PricedOrderLine(1L, 1, originalPrice)), placed, placed.plusSeconds(1800)));
-            var fresh = new com.careeats.backend.prc.application.OrderHistoryService(
-                new com.careeats.backend.prc.infrastructure.JdbcOrderHistoryRepository(jdbc),
-                new JdbcLedgerRepository(jdbc), new JdbcRestaurantAssignments(jdbc));
+
+            
+        var fresh = new com.careeats.backend.prc.application.OrderHistoryService(
+          new com.careeats.backend.prc.infrastructure.JdbcOrderHistoryRepository(jdbc),
+          new JdbcLedgerRepository(jdbc),
+          new JdbcRestaurantAssignments(jdbc),
+          new com.careeats.backend.prc.application.HistoryVisibilityStrategies(List.of(
+          new com.careeats.backend.prc.application.CustomerHistoryStrategy(),
+          new com.careeats.backend.prc.application.RestaurantHistoryStrategy(),
+          new com.careeats.backend.prc.application.OperatorHistoryStrategy(),
+          new com.careeats.backend.prc.application.CourierHistoryStrategy()
+         ))
+      );
+
+
             var receipt = fresh.receiptFor(users.findByEmail("customer@careeats.com"), order.getOrderId());
             assertEquals(originalName, receipt.lines().get(0).description());
             assertEquals(originalPrice, receipt.lines().get(0).unitPrice());
