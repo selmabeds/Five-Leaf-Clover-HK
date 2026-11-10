@@ -14,7 +14,16 @@ import static org.mockito.Mockito.*;
 class OrderHistoryServiceTest {
     private final OrderHistoryRepository repository=mock(OrderHistoryRepository.class);
     private final LedgerRepository ledger=new LedgerRepository();
-    private final OrderHistoryService history=new OrderHistoryService(repository,ledger,Map.of(2L,5L));
+
+    private final HistoryVisibilityStrategies strategies =
+        new HistoryVisibilityStrategies(List.of(
+            new CustomerHistoryStrategy(),
+            new RestaurantHistoryStrategy(),
+            new OperatorHistoryStrategy(),
+            new CourierHistoryStrategy()
+        ));
+        private final OrderHistoryService history = new OrderHistoryService(repository, ledger, Map.of(2L, 5L), strategies);
+
     private User user(long id,Role role) { return new User(id,role.name(),id+"@example.test","hash",role); }
     private OrderHistoryRecord row(OrderStatus status) {
         return new OrderHistoryRecord(10L,1L,5L,"Test Restaurant",status,null,LocalDateTime.of(2026,11,1,12,0),
