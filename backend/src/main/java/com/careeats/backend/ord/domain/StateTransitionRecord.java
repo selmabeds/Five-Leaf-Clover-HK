@@ -1,5 +1,6 @@
 package com.careeats.backend.ord.domain;
 import java.time.LocalDateTime;
+import java.time.Clock;
 
 public class StateTransitionRecord {
     private final String eventId;
@@ -9,7 +10,8 @@ public class StateTransitionRecord {
     private final LocalDateTime timestamp;
 
     public StateTransitionRecord(String eventId, Long orderId, OrderStatus previousStatus, OrderStatus newStatus) {
-        this(eventId, orderId, previousStatus, newStatus, LocalDateTime.now());
+        this(eventId, orderId, previousStatus, newStatus,
+        LocalDateTime.now(Clock.systemUTC()));
     }
 
     public StateTransitionRecord(String eventId, Long orderId, OrderStatus previousStatus, OrderStatus newStatus, LocalDateTime timestamp) {

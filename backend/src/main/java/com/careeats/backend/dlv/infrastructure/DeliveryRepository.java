@@ -7,6 +7,9 @@ import com.careeats.backend.dlv.domain.CourierState;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import com.careeats.backend.prc.domain.DeliveryConfirmation;
+import java.time.OffsetDateTime;
+
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
@@ -160,6 +163,21 @@ public class DeliveryRepository {
                 "DELETE FROM careeats.delivery_assignments WHERE order_id = ?",
                 orderId);
     }
+
+    public DeliveryConfirmation findConfirmedDelivery(long orderId) {
+    return jdbc.query("""
+            SELECT order_id, courier_id, placed_at, delivered_at
+            FROM careeats.delivered_orders
+            WHERE order_id = ?
+            """,
+            (rs, row) -> new DeliveryConfirmation(
+                    rs.getLong("order_id"),
+                    rs.getLong("courier_id"),
+                    rs.getObject("placed_at", OffsetDateTime.class).toInstant(),
+                    rs.getObject("delivered_at", OffsetDateTime.class).toInstant()),
+            orderId
+    ).stream().findFirst().orElse(null);
+}
 
     private Courier readCourier(ResultSet rs) throws SQLException {
         return new Courier(
