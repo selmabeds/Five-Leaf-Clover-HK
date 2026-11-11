@@ -40,6 +40,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final RestaurantRepository restaurantRepository;
     private final UserRepo userRepo;
+    private final Runnable dispatchReadyOrders;
     private final OrderPlacementHandler placementChain; //Chain of Responsibility order placement validation (R-ORD-02)
     
     private final OrderEventPublisher eventPublisher =
@@ -56,41 +57,57 @@ public class OrderService {
     private final Map<Long, Long> restaurantAssignments;
 
     public OrderService(
-            OrderRepository orderRepository,
-            RestaurantRepository restaurantRepository,
-            UserRepo userRepo,
-            Map<Long, Long> restaurantAssignments
-    ) {
-        if (orderRepository == null
-                || restaurantRepository == null
-                || userRepo == null
-                || restaurantAssignments == null) {
+        OrderRepository orderRepository,
+        RestaurantRepository restaurantRepository,
+        UserRepo userRepo,
+        Map<Long, Long> restaurantAssignments
+) {
+    this(
+            orderRepository,
+            restaurantRepository,
+            userRepo,
+            restaurantAssignments,
+            () -> {}
+    );
+}
 
-            throw new IllegalArgumentException(
-                    "OrderService dependencies cannot be null"
-            );
-        }
-
-        this.orderRepository = orderRepository;
-        this.restaurantRepository = restaurantRepository;
-        this.userRepo = userRepo;
-        this.restaurantAssignments =
-                restaurantAssignments;
-        eventPublisher.registerObserver(eventLogObserver);
-        eventPublisher.registerObserver(statusObserver);
-        
-        OrderPlacementHandler firstHandler = new RestaurantExistsHandler();
-
-        firstHandler
-                .setNext(new RestaurantOpenHandler())
-                .setNext(new OrderNotEmptyHandler())
-                .setNext(new NoDuplicateItemsHandler())
-                .setNext(new ItemBelongsToRestaurantHandler())
-                .setNext(new ItemAvailableHandler());
-
-        this.placementChain = firstHandler;
+public OrderService(
+        OrderRepository orderRepository,
+        RestaurantRepository restaurantRepository,
+        UserRepo userRepo,
+        Map<Long, Long> restaurantAssignments,
+        Runnable dispatchReadyOrders
+) {
+    if (orderRepository == null
+            || restaurantRepository == null
+            || userRepo == null
+            || restaurantAssignments == null
+            || dispatchReadyOrders == null) {
+        throw new IllegalArgumentException(
+                "OrderService dependencies cannot be null"
+        );
     }
 
+    this.orderRepository = orderRepository;
+    this.restaurantRepository = restaurantRepository;
+    this.userRepo = userRepo;
+    this.restaurantAssignments = restaurantAssignments;
+    this.dispatchReadyOrders = dispatchReadyOrders;
+
+    eventPublisher.registerObserver(eventLogObserver);
+    eventPublisher.registerObserver(statusObserver);
+
+    OrderPlacementHandler firstHandler = new RestaurantExistsHandler();
+
+    firstHandler
+            .setNext(new RestaurantOpenHandler())
+            .setNext(new OrderNotEmptyHandler())
+            .setNext(new NoDuplicateItemsHandler())
+            .setNext(new ItemBelongsToRestaurantHandler())
+            .setNext(new ItemAvailableHandler());
+
+    this.placementChain = firstHandler;
+}
     private void notifyLatestTransition(Order order) {
         orderRepository.save(order);
         List<StateTransitionRecord> history =
@@ -315,18 +332,19 @@ public class OrderService {
 
     // MARK ORDER READY
     public synchronized Order markOrderReady(Long orderId) {
-        orderRepository.lockForWrite();
+    orderRepository.lockForWrite();
 
-        Order order = requireOrder(orderId);
+    Order order = requireOrder(orderId);
 
-        requireRestaurantStaff(order.getRestaurantId());
+    requireRestaurantStaff(order.getRestaurantId());
 
-        order.markReady();
+    order.markReady();
 
-        notifyLatestTransition(order);
+    notifyLatestTransition(order);
+    dispatchReadyOrders.run();
 
-        return order;
-    }
+    return order;
+}
 
     // CANCEL ORDER - CUSTOMER OR OPERATOR
     public synchronized Order cancelOrder(Long orderId) {
