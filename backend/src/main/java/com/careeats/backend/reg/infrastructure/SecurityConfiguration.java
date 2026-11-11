@@ -41,8 +41,14 @@ public class SecurityConfiguration {
                 .anyRequest().authenticated()
             )
             .exceptionHandling(errors -> errors.defaultAuthenticationEntryPointFor(
-                (request,response,error) -> response.sendError(401,"Authentication required"),
-                request -> request.getRequestURI().startsWith(request.getContextPath()+"/api/prc/")))
+    (request, response, error) ->
+        response.sendError(401, "Authentication required"),
+    request ->
+        request.getRequestURI().startsWith(
+            request.getContextPath() + "/api/prc/")
+        || request.getRequestURI().startsWith(
+            request.getContextPath() + "/api/delivery/")
+))
             .formLogin(login -> login
                 .successHandler((request, response, authentication) -> {
                     response.setStatus(200);

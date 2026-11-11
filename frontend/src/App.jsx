@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import PrcConsole from './prc/PrcConsole';
+import DeliveryConsole from './dlv/DeliveryConsole';
 
 function App() {
   const restaurantCategories = {
@@ -395,6 +396,15 @@ async function handleStartPreparation(order) {
           <p>Logged in as {email}</p>
 
           <nav className="dashboard-tabs">
+            {['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
+  <button
+    type="button"
+    className={activeTab === 'delivery' ? 'active' : ''}
+    onClick={() => setActiveTab('delivery')}
+  >
+    {currentUser.role === 'COURIER' ? 'Delivery' : 'Dispatch'}
+  </button>
+)}
             <button
               type="button"
               className={activeTab === 'restaurants' ? 'active' : ''}
@@ -584,7 +594,15 @@ async function handleStartPreparation(order) {
               ))}
             </section>
           )}
-
+{activeTab === 'delivery'
+  && ['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
+    <DeliveryConsole
+      key={currentUser.userId}
+      user={currentUser}
+      addLog={addLog}
+      getCsrfToken={getCsrfToken}
+    />
+)}
           {activeTab === 'logs' && currentUser && (
             <PrcConsole key={currentUser.userId} user={currentUser} logs={logs}
               addLog={addLog} getCsrfToken={getCsrfToken} />
