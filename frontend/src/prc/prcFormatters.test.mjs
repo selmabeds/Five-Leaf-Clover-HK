@@ -17,7 +17,7 @@ test('receipt shows original charge and separate refund', () => {
       { type: 'REFUND', amount: 26.39, recordedAt: '2026-11-02' }], netCharge: 0 });
   assert.ok(text.includes('CHARGE: $26.39'));
   assert.ok(text.includes('REFUND: -$26.39'));
-  assert.ok(text.includes('Net charge: $0.00'));
+  assert.ok(text.includes('Total after refund: $0.00'));
 });
 test('uncharged order details do not invent a fare', () => {
   const text = formatReceipt({ orderId: 2, restaurantName: 'Restaurant', status: 'READY', placedAt: '2026-11-01',

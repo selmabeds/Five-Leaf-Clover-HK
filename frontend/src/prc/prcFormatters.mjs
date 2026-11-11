@@ -1,36 +1,80 @@
-const money = value => '$' + Number(value).toFixed(2);
+const money = value => `$${Number(value).toFixed(2)}`;
 
 export function formatHistory(items, role) {
-  if (!items.length) return 'History: no orders are available for your account.';
-  const title = role === 'COURIER' ? 'Delivery history' : 'Order history';
-  return title + '\n' + items.map(item => {
-    let text = 'Order #' + item.orderId + ' — ' + item.status + '\nRestaurant: ' + item.restaurantName
-      + '\nPlaced: ' + item.placedAt;
-    if (item.deliveredAt) text += '\nDelivered: ' + item.deliveredAt;
-    if (role !== 'COURIER') {
-      text += '\nCharge: ' + (item.totalCharge == null ? 'Not charged' : money(item.totalCharge));
-      if (Number(item.refundedAmount) > 0) text += '\nRefund: ' + money(item.refundedAmount);
+  if (items.length === 0) {
+    return 'History: no orders are available for your account.';
+  }
+
+  const isCourier = role === 'COURIER';
+  const title = isCourier ? 'Delivery history' : 'Order history';
+  const orders = items.map(item => {
+    const lines = [
+      `Order #${item.orderId} — ${item.status}`,
+      `Restaurant: ${item.restaurantName}`,
+      `Placed: ${item.placedAt}`,
+    ];
+
+    if (item.deliveredAt) {
+      lines.push(`Delivered: ${item.deliveredAt}`);
     }
-    return text;
-  }).join('\n\n');
+
+    if (!isCourier) {
+      const charge = item.totalCharge == null ? 'Not charged' : money(item.totalCharge);
+      lines.push(`Charge: ${charge}`);
+
+      if (Number(item.refundedAmount) > 0) {
+        lines.push(`Refund: ${money(item.refundedAmount)}`);
+      }
+    }
+
+    return lines.join('\n');
+  });
+
+  return `${title}\n${orders.join('\n\n')}`;
 }
 
 export function formatReceipt(receipt) {
-  const text = ['Order #' + receipt.orderId + ' — ' + receipt.status,
-    'Restaurant: ' + receipt.restaurantName, 'Placed: ' + receipt.placedAt, ''];
-  for (const line of receipt.lines) text.push(line.description + ' × ' + line.quantity + ' @ '
-    + money(line.unitPrice) + ' = ' + money(line.lineTotal));
-  text.push('', 'Items subtotal: ' + money(receipt.itemSubtotal));
-  if (receipt.rejectionReason) text.push('Reason: ' + receipt.rejectionReason);
-  if (!receipt.fare) {
-    text.push('Not billed. A receipt becomes available after confirmed delivery and billing.');
-  } else {
-    text.push('Delivery fee: ' + money(receipt.fare.deliveryFee), 'Service fee: ' + money(receipt.fare.serviceFee),
-      'Small-order surcharge: ' + money(receipt.fare.smallOrderSurcharge),
-      'Original total charged: ' + money(receipt.fare.totalCharge), 'Delivered: ' + receipt.deliveredAt, '');
-    for (const entry of receipt.entries) text.push(entry.type + ': '
-      + (entry.type === 'REFUND' ? '-' : '') + money(entry.amount) + ' — ' + entry.recordedAt);
-    text.push('Net charge: ' + money(receipt.netCharge));
+  const { fare } = receipt;
+  const lines = [
+    `Order #${receipt.orderId} — ${receipt.status}`,
+    `Restaurant: ${receipt.restaurantName}`,
+    `Placed: ${receipt.placedAt}`,
+    '',
+  ];
+
+  for (const item of receipt.lines) {
+    const unitPrice = money(item.unitPrice);
+    const lineTotal = money(item.lineTotal);
+    lines.push(`${item.description} × ${item.quantity} @ ${unitPrice} = ${lineTotal}`);
   }
-  return text.join('\n');
+
+  lines.push('', `Items subtotal: ${money(receipt.itemSubtotal)}`);
+  if (receipt.rejectionReason) {
+    lines.push(`Reason: ${receipt.rejectionReason}`);
+  }
+
+  if (!fare) {
+    lines.push('Not billed. A receipt becomes available after confirmed delivery and billing.');
+    return lines.join('\n');
+  }
+
+  lines.push(
+    `Delivery fee: ${money(fare.deliveryFee)}`,
+    `Service fee: ${money(fare.serviceFee)}`,
+    `Small-order surcharge: ${money(fare.smallOrderSurcharge)}`,
+    `Original total charged: ${money(fare.totalCharge)}`,
+    `Delivered: ${receipt.deliveredAt}`,
+    '',
+  );
+
+  for (const entry of receipt.entries) {
+    const sign = entry.type === 'REFUND' ? '-' : '';
+    lines.push(`${entry.type}: ${sign}${money(entry.amount)} — ${entry.recordedAt}`);
+  }
+
+  if (receipt.entries.some(entry => entry.type === 'REFUND')) {
+    lines.push(`Total after refund: ${money(receipt.netCharge)}`);
+  }
+
+  return lines.join('\n');
 }
