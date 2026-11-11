@@ -54,6 +54,11 @@ public class JdbcLedgerRepository extends LedgerRepository {
             "INSERT INTO careeats.priced_lines(order_id,position,item_id,quantity,unit_price) VALUES (?,?,?,?,?)",
             order.orderId(),position++,line.menuItemId(),line.quantity(),line.unitPrice());
     }
+    @Override public FareDecomposition findFare(Long id) {
+        return jdbc.query("SELECT * FROM careeats.fare_snapshots WHERE order_id=?",(rs,n)->new FareDecomposition(
+            rs.getBigDecimal("item_subtotal"),rs.getBigDecimal("delivery_fee"),rs.getBigDecimal("service_fee"),
+            rs.getBigDecimal("small_order_surcharge"),rs.getBigDecimal("total_charge")),id).stream().findFirst().orElse(null);
+    }
     private List<LedgerEntry> query(String where,Object... args) {
         return jdbc.query("SELECT l.*,d.customer_id,d.restaurant_id,d.courier_id,d.placed_at,d.delivered_at FROM careeats.ledger_entries l JOIN careeats.delivered_orders d ON d.order_id=l.order_id "
             +where+" ORDER BY l.order_id, CASE WHEN l.entry_type='CHARGE' THEN 0 ELSE 1 END",(rs,n)->new LedgerEntry(

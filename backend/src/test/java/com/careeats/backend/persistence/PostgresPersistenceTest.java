@@ -86,6 +86,7 @@ class PostgresPersistenceTest {
     @Autowired PlatformTransactionManager transactions;
     @Autowired WebApplicationContext web;
     @Autowired javax.sql.DataSource dataSource;
+    @Autowired com.careeats.backend.prc.application.OrderHistoryService prcHistory;
 
     private void login(String email) {
         SecurityContextHolder.getContext().setAuthentication(
@@ -98,6 +99,123 @@ class PostgresPersistenceTest {
     }
 
     private TransactionTemplate tx() { return new TransactionTemplate(transactions); }
+
+    private MockHttpSession sessionFor(String email, String password) throws Exception {
+        SecurityContextHolder.clearContext();
+        var mvc = MockMvcBuilders.webAppContextSetup(web).apply(springSecurity()).build();
+        var result = mvc.perform(post("/login").with(csrf()).param("username", email).param("password", password))
+            .andExpect(status().isOk()).andReturn();
+        return (MockHttpSession) result.getRequest().getSession(false);
+    }
+
+    @Test void prcHttpHistoryIsScopedAndProtectsUnbilledReceipts() throws Exception {
+        Order order = place();
+        SecurityContextHolder.clearContext();
+        var mvc = MockMvcBuilders.webAppContextSetup(web).apply(springSecurity()).build();
+        mvc.perform(get("/api/prc/history")).andExpect(status().isUnauthorized());
+        var customer = sessionFor("customer@careeats.com", "Customer123!");
+        mvc.perform(get("/api/prc/context").session(customer)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.role").value("CUSTOMER")).andExpect(jsonPath("$.userId").value(1));
+        String content = mvc.perform(get("/api/prc/history").session(customer)).andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+        var rows = new tools.jackson.databind.ObjectMapper().readTree(content);
+        assertFalse(rows.isEmpty());
+        for (var row : rows) assertEquals(1L, row.get("customerId").asLong());
+        mvc.perform(get("/api/prc/orders/" + order.getOrderId()).session(customer))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.lines[0].description").value("Vegetable Bowl"));
+        mvc.perform(get("/api/prc/orders/" + order.getOrderId() + "/receipt").session(customer))
+            .andExpect(status().isConflict());
+        mvc.perform(get("/api/prc/orders/100").session(customer)).andExpect(status().isForbidden());
+        mvc.perform(get("/api/prc/orders/9999999").session(customer)).andExpect(status().isNotFound());
+        mvc.perform(post("/api/prc/orders/" + order.getOrderId() + "/refund").session(customer).with(csrf()))
+            .andExpect(status().isForbidden());
+        var staff = sessionFor("staff5@example.test", "DemoOnly123!");
+        mvc.perform(get("/api/prc/context").session(staff)).andExpect(status().isOk())
+            .andExpect(jsonPath("$.restaurantId").value(5));
+        var restaurantRows = new tools.jackson.databind.ObjectMapper().readTree(mvc.perform(
+            get("/api/prc/history").session(staff)).andExpect(status().isOk()).andReturn().getResponse().getContentAsString());
+        assertEquals(6, restaurantRows.size());
+        for (var row : restaurantRows) assertEquals(5L, row.get("restaurantId").asLong());
+        mvc.perform(get("/api/prc/orders/" + order.getOrderId()).session(staff)).andExpect(status().isForbidden());
+        var operator = sessionFor("operator@careeats.com", "Operator123!");
+        mvc.perform(get("/api/prc/history").session(operator)).andExpect(status().isOk());
+        mvc.perform(post("/api/prc/orders/" + order.getOrderId() + "/refund").session(operator).with(csrf()))
+            .andExpect(status().isBadRequest());
+        mvc.perform(post("/api/prc/orders/" + order.getOrderId() + "/refund").session(operator))
+            .andExpect(status().isForbidden());
+    }
+
+    @Test void unchargedTerminalOrdersAppearWithoutFabricatedCharges() {
+        var rejected = prcHistory.detailsFor(users.findByEmail("customer5@example.test"), 104L);
+        var cancelled = prcHistory.detailsFor(users.findByEmail("customer6@example.test"), 105L);
+        assertEquals(OrderStatus.REJECTED, rejected.status());
+        assertEquals(OrderStatus.CANCELLED, cancelled.status());
+        assertNull(rejected.fare());
+        assertTrue(rejected.entries().isEmpty());
+        assertTrue(cancelled.entries().isEmpty());
+        var rows = prcHistory.historyFor(users.findByEmail("customer5@example.test"));
+        var row = rows.stream().filter(item -> item.orderId().equals(104L)).findFirst().orElseThrow();
+        assertEquals(new BigDecimal("0.00"), ((OrderHistoryItem.Financial) row).totalCharge());
+    }
+
+    @Test void savedReceiptsSurviveRepositoryRecreationAndRefundsWithoutLeakingCourierPayments() throws Exception {
+        Order order = place();
+        var originalName = jdbc.queryForObject("SELECT item_name FROM careeats.order_lines WHERE order_id=?", String.class, order.getOrderId());
+        var originalPrice = jdbc.queryForObject("SELECT unit_price FROM careeats.order_lines WHERE order_id=?", BigDecimal.class, order.getOrderId());
+        tx().executeWithoutResult(status -> {
+            DatabaseLock.acquire(jdbc);
+            jdbc.update("UPDATE careeats.menu_items SET name='Renamed meal',price=99.99 WHERE restaurant_id=1 AND item_id=1");
+        });
+        try {
+            Instant placed = Instant.parse("2026-11-01T12:00:00Z");
+            pricing.recordDeliveredOrder(new DeliveredOrder(order.getOrderId(), 1L, 1L, 3L,
+                List.of(new PricedOrderLine(1L, 1, originalPrice)), placed, placed.plusSeconds(1800)));
+
+            
+        var fresh = new com.careeats.backend.prc.application.OrderHistoryService(
+          new com.careeats.backend.prc.infrastructure.JdbcOrderHistoryRepository(jdbc),
+          new JdbcLedgerRepository(jdbc),
+          new JdbcRestaurantAssignments(jdbc),
+          new com.careeats.backend.prc.application.HistoryVisibilityStrategies(List.of(
+          new com.careeats.backend.prc.application.CustomerHistoryStrategy(),
+          new com.careeats.backend.prc.application.RestaurantHistoryStrategy(),
+          new com.careeats.backend.prc.application.OperatorHistoryStrategy(),
+          new com.careeats.backend.prc.application.CourierHistoryStrategy()
+         ))
+      );
+
+
+            var receipt = fresh.receiptFor(users.findByEmail("customer@careeats.com"), order.getOrderId());
+            assertEquals(originalName, receipt.lines().get(0).description());
+            assertEquals(originalPrice, receipt.lines().get(0).unitPrice());
+            assertEquals(new BigDecimal("21.53"), receipt.fare().totalCharge());
+            var mvc = MockMvcBuilders.webAppContextSetup(web).apply(springSecurity()).build();
+            var courier = sessionFor("courier@careeats.com", "Courier123!");
+            String courierJson = mvc.perform(get("/api/prc/history").session(courier)).andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+            assertFalse(courierJson.contains("totalCharge"));
+            assertFalse(courierJson.contains("refundedAmount"));
+            assertFalse(courierJson.contains("customerId"));
+            mvc.perform(get("/api/prc/orders/" + order.getOrderId() + "/receipt").session(courier))
+                .andExpect(status().isForbidden());
+            var operator = sessionFor("operator@careeats.com", "Operator123!");
+            mvc.perform(post("/api/prc/orders/" + order.getOrderId() + "/refund").session(operator).with(csrf()))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.type").value("REFUND"));
+            mvc.perform(post("/api/prc/orders/" + order.getOrderId() + "/refund").session(operator).with(csrf()))
+                .andExpect(status().isBadRequest());
+            var refunded = fresh.receiptFor(users.findByEmail("operator@careeats.com"), order.getOrderId());
+            assertEquals(OrderStatus.REFUNDED, refunded.status());
+            assertEquals(2, refunded.entries().size());
+            assertEquals(LedgerEntryType.CHARGE, refunded.entries().get(0).type());
+            assertEquals(LedgerEntryType.REFUND, refunded.entries().get(1).type());
+            assertEquals(new BigDecimal("0.00"), refunded.netCharge());
+        } finally {
+            tx().executeWithoutResult(status -> {
+                DatabaseLock.acquire(jdbc);
+                jdbc.update("UPDATE careeats.menu_items SET name=?,price=? WHERE restaurant_id=1 AND item_id=1", originalName, originalPrice);
+            });
+        }
+    }
 
     @Test void listsUseBoundedQueriesAndFilterOrdersInDatabase() {
         CountingDataSource counting = new CountingDataSource(dataSource);

@@ -40,6 +40,9 @@ public class SecurityConfiguration {
                 .requestMatchers("/api/register").permitAll()
                 .anyRequest().authenticated()
             )
+            .exceptionHandling(errors -> errors.defaultAuthenticationEntryPointFor(
+                (request,response,error) -> response.sendError(401,"Authentication required"),
+                request -> request.getRequestURI().startsWith(request.getContextPath()+"/api/prc/")))
             .formLogin(login -> login
                 .successHandler((request, response, authentication) -> {
                     response.setStatus(200);

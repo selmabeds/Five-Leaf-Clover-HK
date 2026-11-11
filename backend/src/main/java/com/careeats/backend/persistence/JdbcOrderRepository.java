@@ -69,10 +69,10 @@ public class JdbcOrderRepository extends OrderRepository {
                 id,order.getCustomerId(),order.getRestaurantId(),order.getStatus().name(),order.getRejectionReason(),sequence);
             int position=0;
             for(OrderLine line:order.getOrderLines()) {
-                var price=jdbc.queryForObject("SELECT price FROM careeats.menu_items WHERE restaurant_id=? AND item_id=?",
-                    java.math.BigDecimal.class,order.getRestaurantId(),line.getMenuItemId());
-                jdbc.update("INSERT INTO careeats.order_lines(order_id,restaurant_id,position,item_id,quantity,unit_price) VALUES (?,?,?,?,?,?)",
-                    id,order.getRestaurantId(),position++,line.getMenuItemId(),line.getQuantity(),price);
+                var item=jdbc.queryForMap("SELECT name,price FROM careeats.menu_items WHERE restaurant_id=? AND item_id=?",
+                    order.getRestaurantId(),line.getMenuItemId());
+                jdbc.update("INSERT INTO careeats.order_lines(order_id,restaurant_id,position,item_id,quantity,unit_price,item_name) VALUES (?,?,?,?,?,?,?)",
+                    id,order.getRestaurantId(),position++,line.getMenuItemId(),line.getQuantity(),item.get("price"),item.get("name"));
             }
         } else {
             Long sequence=jdbc.queryForObject("SELECT accepted_sequence FROM careeats.orders WHERE id=?",Long.class,id);
