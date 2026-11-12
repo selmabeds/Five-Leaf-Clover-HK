@@ -10,6 +10,8 @@ import org.springframework.security.web.SecurityFilterChain;
 import com.careeats.backend.reg.application.AuthUserService;
 import com.careeats.backend.reg.application.RegistrationService;
 
+import com.careeats.backend.reg.application.ProfileService;
+
 @Configuration
 public class SecurityConfiguration {
 
@@ -22,6 +24,13 @@ public class SecurityConfiguration {
     public AuthUserService authUserService(UserRepo userRepo) {
         return new AuthUserService(userRepo);
     }
+
+
+   @Bean
+   public ProfileService profileService(UserRepo userRepo) {
+    return new ProfileService(userRepo);
+    }
+
 
     @Bean
     public RegistrationService registrationService(UserRepo userRepo) {
@@ -48,6 +57,8 @@ public class SecurityConfiguration {
             request.getContextPath() + "/api/prc/")
         || request.getRequestURI().startsWith(
             request.getContextPath() + "/api/delivery/")
+        || request.getRequestURI().startsWith(
+           request.getContextPath() + "/api/profile")
 ))
             .formLogin(login -> login
                 .successHandler((request, response, authentication) -> {
