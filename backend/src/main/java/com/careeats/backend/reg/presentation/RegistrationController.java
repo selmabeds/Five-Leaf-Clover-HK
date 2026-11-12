@@ -7,6 +7,9 @@ import com.careeats.backend.reg.domain.Role;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.careeats.backend.reg.domain.DietaryRestriction;
+import java.util.Set;
+
 @RestController
 @RequestMapping("/api/register")
 public class RegistrationController {
@@ -24,7 +27,8 @@ public class RegistrationController {
                 request.name(),
                 request.email(),
                 request.password(),
-                Role.CUSTOMER
+                Role.CUSTOMER,
+                request.dietaryRestrictions()
             );
 
             return ResponseEntity.ok("Account created: " + user.getEmail());
@@ -37,6 +41,7 @@ public class RegistrationController {
     public record RegisterRequest(
         String name,
         String email,
-        String password
+        String password,
+        Set<DietaryRestriction> dietaryRestrictions
     ) {}
 }
