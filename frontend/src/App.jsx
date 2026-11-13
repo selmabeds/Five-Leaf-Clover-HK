@@ -33,6 +33,8 @@ import {
 import CustomerOrderView from './dash/components/CustomerOrderView';
 import QueueBand from './dash/components/QueueBand';
 import InfoArea from './dash/components/InfoArea';
+import MapView from './dash/components/MapView';
+import { getOnDutyCouriers } from './dash/services/deliveryService';
 
 // First tab each role sees after login (R-DASH-01: only what the role may do)
 function defaultTabFor(role) {
@@ -93,6 +95,9 @@ const categories = [
   const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
   // R-DASH-03: queued / preparing / ready counts per restaurant id
   const [queueSummary, setQueueSummary] = useState({});
+  // Map: on-duty couriers (R-DASH-02) and the restaurant whose details panel is open
+  const [couriers, setCouriers] = useState([]);
+  const [mapSelectedId, setMapSelectedId] = useState(null);
   // Order currently being rejected, and the reason typed for it
   const [rejectingOrderId, setRejectingOrderId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -113,9 +118,13 @@ const categories = [
     if (loggedIn && activeTab === 'myorders') {
       loadCustomerOrders();
     }
-    // Fresh queue colours every time the restaurant list is shown (R-DASH-03)
+    // Map tab: fresh city state every time it is shown (Spec ORD: "after each action, the map… reflect[s] the new state")
     if (loggedIn && activeTab === 'restaurants') {
+      loadRestaurants();
       loadQueueSummary();
+      loadCouriers();
+      // Restaurant staff see their own order queue in the details panel
+      if (currentUser?.role === 'RESTAURANT') loadRestaurantOrders();
     }
   }, [loggedIn, activeTab]);
 
@@ -137,6 +146,15 @@ const categories = [
       addLog('Restaurants loaded');
     } catch (error) {
       showError('Error loading restaurants', error.message);
+    }
+  }
+
+  // R-DASH-02: on-duty couriers for the map (read only, from DLV)
+  async function loadCouriers() {
+    try {
+      setCouriers(await getOnDutyCouriers());
+    } catch (error) {
+      showError('Error loading couriers', error.message);
     }
   }
 
@@ -400,8 +418,10 @@ function handleReset() {
         setQuantities({});
         setOrders([]);
         setCustomerOrders([]);
+        setMapSelectedId(null);
         await loadRestaurants();
         await loadQueueSummary();
+        await loadCouriers();
         addLog('System restored to its initial state');
       }
     )
@@ -462,6 +482,8 @@ async function handleStartPreparation(order) {
         const user = await getCurrentUser();
         setOrders([]);
         setCustomerOrders([]);
+        setCouriers([]);
+        setMapSelectedId(null);
         setNotice(null);
         setCurrentUser(user);
         setLogs([]);
@@ -496,6 +518,8 @@ async function handleStartPreparation(order) {
         setOrders([]);
         setCustomerOrders([]);
         setQueueSummary({});
+        setCouriers([]);
+        setMapSelectedId(null);
         setNotice(null);
         setActiveTab('restaurants');
         setMessage('Logged out successfully');
@@ -554,15 +578,14 @@ async function handleStartPreparation(order) {
           {/* Spec DASH › Goal: "A horizontal tab bar for the modules (Map, Orders, Delivery, Pricing & History)".
               Each role only sees the tabs it may use (R-DASH-01). */}
           <nav className="dashboard-tabs">
-            {canSeeRestaurantList && (
-              <button
-                type="button"
-                className={activeTab === 'restaurants' ? 'active' : ''}
-                onClick={() => setActiveTab('restaurants')}
-              >
-                Map
-              </button>
-            )}
+            {/* Spec DASH: the map "is always visible and shows the current city state" — every role */}
+            <button
+              type="button"
+              className={activeTab === 'restaurants' ? 'active' : ''}
+              onClick={() => setActiveTab('restaurants')}
+            >
+              Map
+            </button>
 
             {(isCustomer || isRestaurant) && (
               <button
@@ -638,6 +661,26 @@ async function handleStartPreparation(order) {
           )}
 
           
+          {/* City map (R-DASH-02/03/06) — every role, quick actions by role (R-DASH-01) */}
+          {activeTab === 'restaurants' && (
+            <section>
+              <h3>Map</h3>
+              <MapView
+                restaurants={restaurants}
+                couriers={couriers}
+                queueSummary={queueSummary}
+                selectedId={mapSelectedId}
+                onSelect={setMapSelectedId}
+                role={role}
+                ownRestaurantId={currentUser?.restaurantId}
+                ownOrders={orders}
+                busy={pendingAction !== null}
+                onViewMenu={loadMenu}
+                onRestaurantStatus={handleRestaurantStatus}
+              />
+            </section>
+          )}
+
           {activeTab === 'restaurants' && canSeeRestaurantList && (
             <section>
               <h3>Explore Restaurants</h3>
