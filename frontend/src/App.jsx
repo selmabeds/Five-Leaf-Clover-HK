@@ -35,6 +35,9 @@ import QueueBand from './dash/components/QueueBand';
 import InfoArea from './dash/components/InfoArea';
 import MapView from './dash/components/MapView';
 import { getOnDutyCouriers } from './dash/services/deliveryService';
+// Reused as-is from the PRC module (read only): the order summary / receipt after delivery
+import { loadReceipt } from './prc/prcApi.mjs';
+import { formatReceipt } from './prc/prcFormatters.mjs';
 
 // First tab each role sees after login (R-DASH-01: only what the role may do)
 function defaultTabFor(role) {
@@ -309,6 +312,17 @@ async function loadCustomerOrders() {
   }
 }
 
+// Customer: R-PRC-02 / UC-PRC-02 order summary after delivery (sequence diagram: displayOrderSummary to the Customer)
+async function handleViewSummary(orderId) {
+  try {
+    const receipt = await loadReceipt(orderId);
+    addLog('Order summary viewed: Order #' + orderId);
+    setNotice({ title: 'Order #' + orderId + ' summary', message: formatReceipt(receipt) });
+  } catch (error) {
+    showError('Order summary failed', error.message);
+  }
+}
+
 // Customer: UC-ORD-03 cancel while PLACED
 function handleCancelOrder(orderId) {
   return runCommand(
@@ -553,10 +567,12 @@ async function handleStartPreparation(order) {
   // The Orders tab groups the menu and order screens (customer: Menu / My Orders; restaurant: Restaurant Orders / My Menu)
   const inOrdersTab = ['menu', 'myorders', 'orders'].includes(activeTab);
 
-  // Info area "selected restaurant": staff = their own restaurant; customer = the menu they opened
-  const infoRestaurant = isRestaurant
+  // Info area "selected restaurant": the one clicked on the map (any role, counts only);
+  // otherwise staff = their own restaurant, customer = the menu they opened
+  const mapSelectedRestaurant = restaurants.find(restaurant => restaurant.restaurantId === mapSelectedId);
+  const infoRestaurant = mapSelectedRestaurant ?? (isRestaurant
     ? restaurants.find(restaurant => restaurant.restaurantId === currentUser?.restaurantId)
-    : (isCustomer ? selectedRestaurant : undefined);
+    : (isCustomer ? selectedRestaurant : undefined));
 
   if (loggedIn) {
     return (
@@ -766,6 +782,7 @@ async function handleStartPreparation(order) {
               busy={pendingAction !== null}
               onRefresh={loadCustomerOrders}
               onCancel={handleCancelOrder}
+              onViewSummary={handleViewSummary}
             />
           )}
 

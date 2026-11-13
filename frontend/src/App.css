@@ -324,6 +324,7 @@ body {
 .notice-box p {
   margin: 0 0 16px;
   color: #54453e;
+  white-space: pre-line;
 }
 
 /* City map (Spec DASH › Map view) */
