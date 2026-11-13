@@ -5,12 +5,15 @@ import OrderView from './OrderView';
  * DASH UI layer: Restaurant Menu (UC-ORD-01 Browse Restaurant Menu).
  *
  * Displays the menu items received from ORD for the selected restaurant,
- * with one OrderView per item to place an order.
+ * with one OrderView per item to place an order. Only customers may place
+ * orders (Spec Appendix A, R-DASH-01), so `canOrder` is false for restaurant
+ * staff viewing their own menu: no ordering controls are shown at all.
  */
 export default function MenuView({
   selectedRestaurant,
   selectedRestaurantId,
   menu,
+  canOrder,
   quantities,
   onQuantityChange,
   onPlaceOrder
@@ -26,10 +29,14 @@ export default function MenuView({
       )}
 
       {/* R-DASH-04: no ordering from a paused or closed restaurant */}
-      {selectedRestaurant && restaurantClosed && (
+      {canOrder && selectedRestaurant && restaurantClosed && (
         <p className="menu-notice">
           This restaurant is {selectedRestaurant.status.toLowerCase()}. Ordering is unavailable.
         </p>
+      )}
+
+      {!canOrder && selectedRestaurant && (
+        <p className="menu-notice">Restaurant status: {selectedRestaurant.status}</p>
       )}
 
       {menu.map(item => {
@@ -41,15 +48,17 @@ export default function MenuView({
               {item.name} - ${item.price} - {item.status}
             </p>
 
-            <OrderView
-              item={item}
-              quantity={quantities[item.itemId] ?? 1}
-              disabled={restaurantClosed || soldOut}
-              onQuantityChange={onQuantityChange}
-              onPlaceOrder={onPlaceOrder}
-            />
+            {canOrder && (
+              <OrderView
+                item={item}
+                quantity={quantities[item.itemId] ?? 1}
+                disabled={restaurantClosed || soldOut}
+                onQuantityChange={onQuantityChange}
+                onPlaceOrder={onPlaceOrder}
+              />
+            )}
 
-            {soldOut && !restaurantClosed && (
+            {canOrder && soldOut && !restaurantClosed && (
               <span className="menu-item-note">Sold out</span>
             )}
           </div>

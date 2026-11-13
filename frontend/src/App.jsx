@@ -23,6 +23,13 @@ import {
   markOrderReady
 } from './dash/services/orderService';
 
+// First tab each role sees after login (R-DASH-01: only what the role may do)
+function defaultTabFor(role) {
+  if (role === 'RESTAURANT') return 'orders';
+  if (role === 'COURIER' || role === 'OPERATOR') return 'delivery';
+  return 'restaurants';
+}
+
 function App() {
   const restaurantCategories = {
   1: 'Other',
@@ -240,6 +247,16 @@ function openMenuTab() {
   setActiveTab('menu');
 }
 
+// Restaurant staff: open the menu of their own restaurant only
+function openMyMenu() {
+  if (currentUser?.restaurantId == null) {
+    addLog('Error loading menu: no restaurant is assigned to this account');
+    setMessage('No restaurant is assigned to this account.');
+    return;
+  }
+  loadMenu(currentUser.restaurantId);
+}
+
 function closeNotice() {
   setNotice(null);
   setActiveTab('restaurants');
@@ -301,7 +318,7 @@ async function handleStartPreparation(order) {
         setCurrentUser(user);
         setLogs([]);
         setLoggedIn(true);
-        setActiveTab('restaurants');
+        setActiveTab(defaultTabFor(user.role));
         addLog('Login successful: ' + email);
         setMessage('Login successful');
       } else {
@@ -352,6 +369,13 @@ async function handleStartPreparation(order) {
     restaurant => restaurant.restaurantId === selectedRestaurantId
   );
 
+  // R-DASH-01 / Spec Appendix A: each role only sees the commands it is permitted to use
+  const role = currentUser?.role;
+  const isCustomer = role === 'CUSTOMER';
+  const isRestaurant = role === 'RESTAURANT';
+  // Customers browse menus; operators see restaurant statuses (pause/reopen any restaurant)
+  const canSeeRestaurantList = isCustomer || role === 'OPERATOR';
+
   if (loggedIn) {
     return (
       <div className="dashboard-container">
@@ -371,23 +395,38 @@ async function handleStartPreparation(order) {
     {currentUser.role === 'COURIER' ? 'Delivery' : 'Dispatch'}
   </button>
 )}
-            <button
-              type="button"
-              className={activeTab === 'restaurants' ? 'active' : ''}
-              onClick={() => setActiveTab('restaurants')}
-            >
-              Restaurants
-            </button>
+            {canSeeRestaurantList && (
+              <button
+                type="button"
+                className={activeTab === 'restaurants' ? 'active' : ''}
+                onClick={() => setActiveTab('restaurants')}
+              >
+                Restaurants
+              </button>
+            )}
 
-            <button
-              type="button"
-              className={activeTab === 'menu' ? 'active' : ''}
-              onClick={openMenuTab}
-            >
-              {selectedRestaurant && activeTab !== 'menu'
-                ? 'View previous menu: ' + selectedRestaurant.name
-                : 'Menu'}
-            </button>
+            {isCustomer && (
+              <button
+                type="button"
+                className={activeTab === 'menu' ? 'active' : ''}
+                onClick={openMenuTab}
+              >
+                {selectedRestaurant && activeTab !== 'menu'
+                  ? 'View previous menu: ' + selectedRestaurant.name
+                  : 'Menu'}
+              </button>
+            )}
+
+            {/* Restaurant staff only see their own menu (Appendix A: not other restaurants' menus) */}
+            {isRestaurant && (
+              <button
+                type="button"
+                className={activeTab === 'menu' ? 'active' : ''}
+                onClick={openMyMenu}
+              >
+                My Menu
+              </button>
+            )}
 
             {currentUser?.role === 'RESTAURANT' && (
               <button
@@ -409,7 +448,7 @@ async function handleStartPreparation(order) {
           </nav>
 
           
-          {activeTab === 'restaurants' && (
+          {activeTab === 'restaurants' && canSeeRestaurantList && (
             <section>
               <h3>Explore Restaurants</h3>
 
@@ -437,12 +476,15 @@ async function handleStartPreparation(order) {
                       Status: {restaurant.status}
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={() => loadMenu(restaurant.restaurantId)}
-                    >
-                      View Menu
-                    </button>
+                    {/* Only customers browse menus (operators only see the status) */}
+                    {isCustomer && (
+                      <button
+                        type="button"
+                        onClick={() => loadMenu(restaurant.restaurantId)}
+                      >
+                        View Menu
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -450,11 +492,12 @@ async function handleStartPreparation(order) {
           )}
 
 
-          {activeTab === 'menu' && (
+          {activeTab === 'menu' && (isCustomer || isRestaurant) && (
             <MenuView
               selectedRestaurant={selectedRestaurant}
               selectedRestaurantId={selectedRestaurantId}
               menu={menu}
+              canOrder={isCustomer}
               quantities={quantities}
               onQuantityChange={(itemId, value) =>
                 setQuantities(previous => ({ ...previous, [itemId]: value }))}
