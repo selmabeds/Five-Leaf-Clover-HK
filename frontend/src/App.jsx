@@ -302,40 +302,24 @@ function closeNotice() {
   setActiveTab('restaurants');
 }
 
+// Only shown on the order whose turn it is (see nextToPrepareId), so no pop-up is needed
 async function handleStartPreparation(order) {
-  const acceptedOrders = orders
-    .filter(
-      o =>
-        o.status === 'ACCEPTED' &&
-        o.restaurantId === order.restaurantId
-    )
-    .sort((a, b) => a.orderId - b.orderId);
-
-  if (acceptedOrders.length === 0) {
-    setMessage('No accepted orders waiting.');
-    return;
-  }
-
-  const nextOrder = acceptedOrders[0];
-
-  if (nextOrder.orderId !== order.orderId) {
-    const confirmed = window.confirm(
-      `Order Queue Warning!\n\n` +
-      `You selected Order #${order.orderId}, ` +
-      `but Order #${nextOrder.orderId} is next in the queue.\n\n` +
-      `Order #${nextOrder.orderId} needs to be prepared first.\n\n` +
-      `Do you want to start Order #${nextOrder.orderId} instead?`
-    );
-
-    if (!confirmed) {
-      return;
-    }
-  }
-
   await runOrderAction(
     `/api/restaurants/${order.restaurantId}/start-next`,
     'Start Preparation'
   );
+}
+
+// When an order became ACCEPTED, read from its transition history (R-ORD-05 event records)
+function acceptedTime(order) {
+  const accepted = (order.transitionHistory ?? [])
+    .filter(record => record.newStatus === 'ACCEPTED')
+    .at(-1);
+
+  if (!accepted) return Number.MAX_SAFE_INTEGER;
+
+  const time = Date.parse(accepted.timestamp);
+  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
 }
    
 
@@ -473,6 +457,12 @@ async function handleStartPreparation(order) {
   const selectedRestaurant = restaurants.find(
     restaurant => restaurant.restaurantId === selectedRestaurantId
   );
+
+  // R-ORD-03 / UC-ORD-02 step 6: accepted orders are prepared in arrival order (first in, first out).
+  // The order whose turn it is = the ACCEPTED order that was accepted first (ties: lowest order number).
+  const nextToPrepareId = orders
+    .filter(order => order.status === 'ACCEPTED')
+    .sort((a, b) => acceptedTime(a) - acceptedTime(b) || a.orderId - b.orderId)[0]?.orderId ?? null;
 
   if (loggedIn) {
     return (
@@ -709,7 +699,7 @@ async function handleStartPreparation(order) {
                         </div>
                       )}
 
-                      {order.status === 'ACCEPTED' && (
+                      {order.status === 'ACCEPTED' && order.orderId === nextToPrepareId && (
                         <button
                           type="button"
                           disabled={ordersLoading || pendingAction !== null}
@@ -717,6 +707,10 @@ async function handleStartPreparation(order) {
                         >
                           Start Preparation
                         </button>
+                      )}
+
+                      {order.status === 'ACCEPTED' && order.orderId !== nextToPrepareId && (
+                        <p className="order-note">Waiting in preparation queue</p>
                       )}
 
                       {order.status === 'PREPARING' && (
