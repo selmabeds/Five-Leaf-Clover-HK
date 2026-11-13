@@ -31,6 +31,7 @@ import {
 } from './dash/services/orderService';
 import CustomerOrderView from './dash/components/CustomerOrderView';
 import QueueBand from './dash/components/QueueBand';
+import InfoArea from './dash/components/InfoArea';
 
 // First tab each role sees after login (R-DASH-01: only what the role may do)
 function defaultTabFor(role) {
@@ -100,6 +101,7 @@ const categories = [
     useEffect(() => {
     if (loggedIn) {
       loadRestaurants();
+      loadQueueSummary();
     }
   }, [loggedIn]);
 
@@ -238,6 +240,8 @@ async function runOrderAction(action, command) {
     setMessage(action + ' successful');
 
     await loadRestaurantOrders();
+    // Quick stats / queue band follow the order's new state
+    await loadQueueSummary();
 
   } catch (error) {
     showError(action + ' failed', error.message);
@@ -492,6 +496,11 @@ async function handleStartPreparation(order) {
   // Customers browse menus; operators see restaurant statuses (pause/reopen any restaurant)
   const canSeeRestaurantList = isCustomer || role === 'OPERATOR';
 
+  // Info area "selected restaurant": staff = their own restaurant; customer = the menu they opened
+  const infoRestaurant = isRestaurant
+    ? restaurants.find(restaurant => restaurant.restaurantId === currentUser?.restaurantId)
+    : (isCustomer ? selectedRestaurant : undefined);
+
   if (loggedIn) {
     return (
       <div className="dashboard-container">
@@ -499,7 +508,12 @@ async function handleStartPreparation(order) {
           <h1>CARE Eats</h1>
           <h2>Dashboard</h2>
 
-          <p>Logged in as {email}</p>
+          <InfoArea
+            user={currentUser}
+            email={email}
+            restaurant={infoRestaurant}
+            stats={infoRestaurant ? queueSummary[infoRestaurant.restaurantId] : undefined}
+          />
 
           <nav className="dashboard-tabs">
             {['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
