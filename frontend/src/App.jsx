@@ -2,6 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import PrcConsole from './prc/PrcConsole';
 import DeliveryConsole from './dlv/DeliveryConsole';
+import RestaurantOrderView from './dash/components/RestaurantOrderView';
+import {
+  getRestaurantOrders,
+  acceptOrder,
+  rejectOrder,
+  startPreparation,
+  markOrderReady
+} from './dash/services/orderService';
 
 function App() {
   const restaurantCategories = {
@@ -183,9 +191,7 @@ const categories = [
     setOrdersLoading(true);
     const request = (async () => {
       try {
-        const response = await fetch(`/api/restaurants/${restaurantId}/orders`, { credentials: 'include' });
-        if (!response.ok) throw new Error(await response.text());
-        const data = await response.json();
+        const data = await getRestaurantOrders(restaurantId);
         setOrders(data);
         addLog('Restaurant orders loaded for restaurant ' + restaurantId + ' (' + data.length + ' orders)');
       } catch (error) {
@@ -204,7 +210,8 @@ const categories = [
   }
 
 
-async function runOrderAction(url, action, rejectionReason = null) {
+// Runs one restaurant-order command; `command` is an orderService.js call that receives the CSRF token
+async function runOrderAction(action, command) {
   // Prevent duplicate actions while another request is running
   if (actionInFlight.current) return;
 
@@ -218,27 +225,7 @@ async function runOrderAction(url, action, rejectionReason = null) {
     }
 
     const csrfToken = await getCsrfToken();
-
-    const response = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken
-      },
-      ...(action === 'Reject'
-        ? { body: JSON.stringify({ reason: rejectionReason }) }
-        : {})
-    });
-
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    const order = await response.json();
-
-   
+    const order = await command(csrfToken);
 
     setOrders(previous =>
       previous.map(existing =>
@@ -281,11 +268,7 @@ async function handleReject(orderId) {
 
   cancelReject();
 
-  await runOrderAction(
-    `/api/orders/${orderId}/reject`,
-    'Reject',
-    reason
-  );
+  await runOrderAction('Reject', csrfToken => rejectOrder(orderId, reason, csrfToken));
 }
 
 function openMenuTab() {
@@ -302,24 +285,9 @@ function closeNotice() {
   setActiveTab('restaurants');
 }
 
-// Only shown on the order whose turn it is (see nextToPrepareId), so no pop-up is needed
+// Only shown on the order whose turn it is (RestaurantOrderView decides), so no pop-up is needed
 async function handleStartPreparation(order) {
-  await runOrderAction(
-    `/api/restaurants/${order.restaurantId}/start-next`,
-    'Start Preparation'
-  );
-}
-
-// When an order became ACCEPTED, read from its transition history (R-ORD-05 event records)
-function acceptedTime(order) {
-  const accepted = (order.transitionHistory ?? [])
-    .filter(record => record.newStatus === 'ACCEPTED')
-    .at(-1);
-
-  if (!accepted) return Number.MAX_SAFE_INTEGER;
-
-  const time = Date.parse(accepted.timestamp);
-  return Number.isNaN(time) ? Number.MAX_SAFE_INTEGER : time;
+  await runOrderAction('Start Preparation', csrfToken => startPreparation(order.restaurantId, csrfToken));
 }
    
 
@@ -457,12 +425,6 @@ function acceptedTime(order) {
   const selectedRestaurant = restaurants.find(
     restaurant => restaurant.restaurantId === selectedRestaurantId
   );
-
-  // R-ORD-03 / UC-ORD-02 step 6: accepted orders are prepared in arrival order (first in, first out).
-  // The order whose turn it is = the ACCEPTED order that was accepted first (ties: lowest order number).
-  const nextToPrepareId = orders
-    .filter(order => order.status === 'ACCEPTED')
-    .sort((a, b) => acceptedTime(a) - acceptedTime(b) || a.orderId - b.orderId)[0]?.orderId ?? null;
 
   if (loggedIn) {
     return (
@@ -622,120 +584,23 @@ function acceptedTime(order) {
           )}
 
          {activeTab === 'orders' && currentUser?.role === 'RESTAURANT' && (
-            <section aria-busy={ordersLoading || pendingAction !== null}>
-              <h3>Restaurant Orders</h3>
-              {pendingAction && <p role="status">{pendingAction} in progress...</p>}
-
-              <button
-                type="button"
-                disabled={ordersLoading || pendingAction !== null}
-                onClick={loadRestaurantOrders}
-              >
-                {ordersLoading ? 'Loading orders...' : 'Refresh Orders'}
-              </button>
-
-              {!ordersLoading && orders.length === 0 && (
-                <p className="orders-empty">No orders for this restaurant yet.</p>
-              )}
-
-              <div className="order-list">
-                {orders.map(order => (
-                  <div className="order-card" key={order.orderId}>
-                    <div className="order-card-header">
-                      <span className="order-number">Order #{order.orderId}</span>
-                      <span className="order-status">{order.status}</span>
-                    </div>
-
-                    <div className="order-actions">
-                      {order.status === 'PLACED' && rejectingOrderId !== order.orderId && (
-                        <>
-                          <button
-                            type="button"
-                            disabled={ordersLoading || pendingAction !== null}
-                            onClick={() =>
-                              runOrderAction(
-                                `/api/orders/${order.orderId}/accept`,
-                                'Accept'
-                              )
-                            }
-                          >
-                            Accept
-                          </button>
-
-                          <button
-                            type="button"
-                            disabled={ordersLoading || pendingAction !== null}
-                            onClick={() => startReject(order.orderId)}
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
-
-                      {order.status === 'PLACED' && rejectingOrderId === order.orderId && (
-                        <div className="reject-form">
-                          <input
-                            type="text"
-                            aria-label={'Reason for rejecting order ' + order.orderId}
-                            placeholder="Reason for rejecting this order"
-                            value={rejectionReason}
-                            onChange={event => setRejectionReason(event.target.value)}
-                            autoFocus
-                          />
-                          <button
-                            type="button"
-                            disabled={ordersLoading || pendingAction !== null || !rejectionReason.trim()}
-                            onClick={() => handleReject(order.orderId)}
-                          >
-                            Confirm Reject
-                          </button>
-                          <button
-                            type="button"
-                            disabled={ordersLoading || pendingAction !== null}
-                            onClick={cancelReject}
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      )}
-
-                      {order.status === 'ACCEPTED' && order.orderId === nextToPrepareId && (
-                        <button
-                          type="button"
-                          disabled={ordersLoading || pendingAction !== null}
-                          onClick={() => handleStartPreparation(order)}
-                        >
-                          Start Preparation
-                        </button>
-                      )}
-
-                      {order.status === 'ACCEPTED' && order.orderId !== nextToPrepareId && (
-                        <p className="order-note">Waiting in preparation queue</p>
-                      )}
-
-                      {order.status === 'PREPARING' && (
-                        <button
-                          type="button"
-                          disabled={ordersLoading || pendingAction !== null}
-                          onClick={() =>
-                            runOrderAction(
-                              `/api/orders/${order.orderId}/ready`,
-                              'Mark Ready'
-                            )
-                          }
-                        >
-                          Mark Ready
-                        </button>
-                      )}
-
-                      {order.status === 'READY' && (
-                        <p className="order-note">Waiting for courier pickup</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
+            <RestaurantOrderView
+              orders={orders}
+              ordersLoading={ordersLoading}
+              pendingAction={pendingAction}
+              rejectingOrderId={rejectingOrderId}
+              rejectionReason={rejectionReason}
+              onRejectionReasonChange={setRejectionReason}
+              onRefresh={loadRestaurantOrders}
+              onAccept={orderId =>
+                runOrderAction('Accept', csrfToken => acceptOrder(orderId, csrfToken))}
+              onStartReject={startReject}
+              onConfirmReject={handleReject}
+              onCancelReject={cancelReject}
+              onStartPreparation={handleStartPreparation}
+              onMarkReady={orderId =>
+                runOrderAction('Mark Ready', csrfToken => markOrderReady(orderId, csrfToken))}
+            />
           )}
 {activeTab === 'delivery'
   && ['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
