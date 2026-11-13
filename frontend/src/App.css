@@ -326,6 +326,35 @@ body {
   color: #54453e;
 }
 
+/* R-DASH-03 preparation-queue bands (text label + colour) */
+
+.queue-band {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.queue-short {
+  background-color: #e3f1e5;
+  color: #2f6b3a;
+  border-color: #b9dcbf;
+}
+
+.queue-building {
+  background-color: #fbefd9;
+  color: #8a5a12;
+  border-color: #efd29c;
+}
+
+.queue-long {
+  background-color: #f8e1de;
+  color: #9b2c22;
+  border-color: #eab5ae;
+}
+
 .restaurant-status-bar {
   display: flex;
   justify-content: space-between;

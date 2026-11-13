@@ -36,6 +36,12 @@ public class DashController {
         return restaurantService.getAllRestaurants();
     }
 
+    // Read model for R-DASH-03 queue colours and the info area's quick stats (counts only)
+    @GetMapping("/restaurants/queue-summary")
+    public List<OrderService.QueueSummary> getQueueSummary() {
+        return orderService.getQueueSummary();
+    }
+
     @GetMapping("/restaurants/{id}/menu")
     public Object getMenu(@PathVariable Long id) {
         return menuService.getMenu(id);

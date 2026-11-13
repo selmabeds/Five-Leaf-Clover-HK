@@ -467,4 +467,37 @@ public OrderService(
         return orderRepository.findByRestaurantId(restaurantId);
     }
 
+    // READ MODEL FOR DASH (Spec ORD responsibility: "per-restaurant queue length and order states")
+    // queued = ACCEPTED orders waiting in the preparation queue (R-ORD-03, used by R-DASH-03 colours);
+    // preparing / ready = the info area's quick stats. Counts only, never order details (Spec Appendix A).
+    public record QueueSummary(Long restaurantId, long queued, long preparing, long ready) { }
+
+    @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
+    public List<QueueSummary> getQueueSummary() {
+
+        // Any authenticated user (R-REG-02); read-only: no state transitions, no events
+        getAuthenticatedUser();
+
+        List<Order> allOrders = orderRepository.findAll();
+        List<QueueSummary> summary = new ArrayList<>();
+
+        for (Restaurant restaurant : restaurantRepository.findAll()) {
+            Long restaurantId = restaurant.getRestaurantId();
+            long queued = 0;
+            long preparing = 0;
+            long ready = 0;
+
+            for (Order order : allOrders) {
+                if (!restaurantId.equals(order.getRestaurantId())) continue;
+                if (order.getStatus() == OrderStatus.ACCEPTED) queued++;
+                else if (order.getStatus() == OrderStatus.PREPARING) preparing++;
+                else if (order.getStatus() == OrderStatus.READY) ready++;
+            }
+
+            summary.add(new QueueSummary(restaurantId, queued, preparing, ready));
+        }
+
+        return summary;
+    }
+
 }

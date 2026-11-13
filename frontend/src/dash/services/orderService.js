@@ -43,6 +43,11 @@ export function getRestaurants() {
   return getJson('/api/restaurants', 'Could not load restaurants');
 }
 
+// Read model for R-DASH-03: per restaurant { restaurantId, queued, preparing, ready } (counts only)
+export function getQueueSummary() {
+  return getJson('/api/restaurants/queue-summary', 'Could not load the preparation queues');
+}
+
 // UC-ORD-01 Browse Restaurant Menu
 export function getMenu(restaurantId) {
   return getJson(`/api/restaurants/${restaurantId}/menu`, 'Could not load menu');

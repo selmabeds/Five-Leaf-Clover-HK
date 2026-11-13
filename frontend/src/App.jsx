@@ -26,9 +26,11 @@ import {
   markItemSoldOut,
   markItemAvailable,
   pauseRestaurant,
-  reopenRestaurant
+  reopenRestaurant,
+  getQueueSummary
 } from './dash/services/orderService';
 import CustomerOrderView from './dash/components/CustomerOrderView';
+import QueueBand from './dash/components/QueueBand';
 
 // First tab each role sees after login (R-DASH-01: only what the role may do)
 function defaultTabFor(role) {
@@ -87,6 +89,8 @@ const categories = [
   // Customer's own orders (My Orders tab)
   const [customerOrders, setCustomerOrders] = useState([]);
   const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+  // R-DASH-03: queued / preparing / ready counts per restaurant id
+  const [queueSummary, setQueueSummary] = useState({});
   // Order currently being rejected, and the reason typed for it
   const [rejectingOrderId, setRejectingOrderId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -105,6 +109,10 @@ const categories = [
     }
     if (loggedIn && activeTab === 'myorders') {
       loadCustomerOrders();
+    }
+    // Fresh queue colours every time the restaurant list is shown (R-DASH-03)
+    if (loggedIn && activeTab === 'restaurants') {
+      loadQueueSummary();
     }
   }, [loggedIn, activeTab]);
 
@@ -126,6 +134,16 @@ const categories = [
       addLog('Restaurants loaded');
     } catch (error) {
       showError('Error loading restaurants', error.message);
+    }
+  }
+
+  // R-DASH-03 read model: counts per restaurant, keyed by restaurant id
+  async function loadQueueSummary() {
+    try {
+      const data = await getQueueSummary();
+      setQueueSummary(Object.fromEntries(data.map(entry => [entry.restaurantId, entry])));
+    } catch (error) {
+      showError('Error loading preparation queues', error.message);
     }
   }
 
@@ -442,6 +460,7 @@ async function handleStartPreparation(order) {
         setQuantities({});
         setOrders([]);
         setCustomerOrders([]);
+        setQueueSummary({});
         setNotice(null);
         setActiveTab('restaurants');
         setMessage('Logged out successfully');
@@ -583,6 +602,12 @@ async function handleStartPreparation(order) {
                       Status: {restaurant.status}
                     </p>
 
+                    {/* R-DASH-03: preparation-queue colour band */}
+                    <QueueBand
+                      queued={queueSummary[restaurant.restaurantId]?.queued ?? 0}
+                      restaurantStatus={restaurant.status}
+                    />
+
                     {/* Only customers browse menus (operators only see the status) */}
                     {isCustomer && (
                       <button
@@ -640,6 +665,9 @@ async function handleStartPreparation(order) {
          {activeTab === 'orders' && currentUser?.role === 'RESTAURANT' && (
             <RestaurantOrderView
               orders={orders}
+              restaurantStatus={
+                restaurants.find(restaurant => restaurant.restaurantId === currentUser.restaurantId)?.status
+              }
               ordersLoading={ordersLoading}
               pendingAction={pendingAction}
               rejectingOrderId={rejectingOrderId}

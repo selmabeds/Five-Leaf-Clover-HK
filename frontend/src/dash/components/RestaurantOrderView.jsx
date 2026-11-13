@@ -1,4 +1,6 @@
 
+import QueueBand from './QueueBand';
+
 /**
  * DASH UI layer: Restaurant Orders.
  *
@@ -21,6 +23,7 @@ function acceptedTime(order) {
 
 export default function RestaurantOrderView({
   orders,
+  restaurantStatus,
   ordersLoading,
   pendingAction,
   rejectingOrderId,
@@ -45,6 +48,15 @@ export default function RestaurantOrderView({
   return (
     <section aria-busy={busy}>
       <h3>Restaurant Orders</h3>
+
+      {/* R-DASH-03: this restaurant's preparation queue = its ACCEPTED orders */}
+      <p>
+        <QueueBand
+          queued={orders.filter(order => order.status === 'ACCEPTED').length}
+          restaurantStatus={restaurantStatus}
+        />
+      </p>
+
       {pendingAction && <p role="status">{pendingAction} in progress...</p>}
 
       <button type="button" disabled={busy} onClick={onRefresh}>
