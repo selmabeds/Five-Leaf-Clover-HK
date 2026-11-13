@@ -43,6 +43,10 @@ export function getRestaurants() {
   return getJson('/api/restaurants', 'Could not load restaurants');
 }
 
+export function getDietaryRecommendations() {
+  return getJson('/api/restaurants/for-you', 'Could not load For You recommendations');
+}
+
 // Read model for R-DASH-03: per restaurant { restaurantId, queued, preparing, ready } (counts only)
 export function getQueueSummary() {
   return getJson('/api/restaurants/queue-summary', 'Could not load the preparation queues');

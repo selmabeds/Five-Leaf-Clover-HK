@@ -74,7 +74,7 @@ export async function logout() {
 }
 
 // UC-REG-01 Create an Account (customer only): returns the response so the caller can read errors
-export async function register({ name, email, password }) {
+export async function register({ name, email, password, dietaryRestrictions }) {
   const csrfToken = await getCsrfToken();
 
   return fetch('/api/register', {
@@ -84,6 +84,24 @@ export async function register({ name, email, password }) {
       'X-CSRF-TOKEN': csrfToken,
     },
     credentials: 'include',
-    body: JSON.stringify({ name, email, password }),
+    body: JSON.stringify({ name, email, password, dietaryRestrictions }),
   });
+}
+
+export async function getProfile() {
+  const response = await fetch('/api/profile', { credentials: 'include' });
+  if (!response.ok) throw new Error('Could not load your profile.');
+  return response.json();
+}
+
+export async function saveDietaryRestrictions(dietaryRestrictions) {
+  const csrfToken = await getCsrfToken();
+  const response = await fetch('/api/profile/dietary-restrictions', {
+    method: 'PUT',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+    body: JSON.stringify({ dietaryRestrictions }),
+  });
+  if (!response.ok) throw new Error('Could not save your dietary preferences.');
+  return response.json();
 }
