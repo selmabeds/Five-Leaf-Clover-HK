@@ -315,9 +315,23 @@ body {
   text-align: center;
 }
 
+.notice-box h4 {
+  margin: 0 0 8px;
+  color: #54453e;
+  font-size: 17px;
+}
+
 .notice-box p {
   margin: 0 0 16px;
   color: #54453e;
+}
+
+.restaurant-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 /* Main dashboard navigation tabs */

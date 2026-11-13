@@ -20,8 +20,15 @@ import {
   acceptOrder,
   rejectOrder,
   startPreparation,
-  markOrderReady
+  markOrderReady,
+  getCustomerOrders,
+  cancelOrder,
+  markItemSoldOut,
+  markItemAvailable,
+  pauseRestaurant,
+  reopenRestaurant
 } from './dash/services/orderService';
+import CustomerOrderView from './dash/components/CustomerOrderView';
 
 // First tab each role sees after login (R-DASH-01: only what the role may do)
 function defaultTabFor(role) {
@@ -74,8 +81,12 @@ const categories = [
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [pendingAction, setPendingAction] = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
-  // In-page pop-up (browser pop-ups like window.alert can be blocked)
+  // In-page pop-up (browser pop-ups like window.alert can be blocked):
+  // { title, message, returnTab } — a new one replaces the previous one, so pop-ups never stack
   const [notice, setNotice] = useState(null);
+  // Customer's own orders (My Orders tab)
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
   // Order currently being rejected, and the reason typed for it
   const [rejectingOrderId, setRejectingOrderId] = useState(null);
   const [rejectionReason, setRejectionReason] = useState('');
@@ -92,10 +103,20 @@ const categories = [
     if (loggedIn && activeTab === 'orders') {
       loadRestaurantOrders();
     }
+    if (loggedIn && activeTab === 'myorders') {
+      loadCustomerOrders();
+    }
   }, [loggedIn, activeTab]);
 
   function addLog(message) {
     setLogs(previous => [...previous, message]);
+  }
+
+  // Course feedback + UC-ORD-09: errors pop up in the user's face, and are still logged (R-DASH-06)
+  function showError(title, errorMessage) {
+    addLog(title + ': ' + errorMessage);
+    setMessage(title + ': ' + errorMessage);
+    setNotice({ title, message: errorMessage });
   }
 
   async function loadRestaurants() {
@@ -104,8 +125,7 @@ const categories = [
       setRestaurants(data);
       addLog('Restaurants loaded');
     } catch (error) {
-      addLog('Error loading restaurants: ' + error.message);
-      setMessage(error.message);
+      showError('Error loading restaurants', error.message);
     }
   }
 
@@ -119,8 +139,7 @@ const categories = [
 
       addLog('Menu loaded for restaurant ' + restaurantId);
     } catch (error) {
-      addLog('Error loading menu: ' + error.message);
-      setMessage(error.message);
+      showError('Error loading menu', error.message);
     }
   }
 
@@ -141,8 +160,7 @@ const categories = [
       addLog('Order placed successfully: #' + order.orderId);
       setMessage('Order placed successfully: #' + order.orderId);
     } catch (error) {
-      addLog('Order placement failed: ' + error.message);
-      setMessage('Order placement failed: ' + error.message);
+      showError('Order placement failed', error.message);
     }
   }
 
@@ -151,8 +169,7 @@ const categories = [
     const restaurantId = currentUser?.restaurantId;
     if (restaurantId == null) {
       setOrders([]);
-      addLog('Error loading orders: no restaurant is assigned to this account');
-      setMessage('No restaurant is assigned to this account.');
+      showError('Error loading orders', 'No restaurant is assigned to this account.');
       return;
     }
     setOrdersLoading(true);
@@ -162,8 +179,7 @@ const categories = [
         setOrders(data);
         addLog('Restaurant orders loaded for restaurant ' + restaurantId + ' (' + data.length + ' orders)');
       } catch (error) {
-        addLog('Error loading orders: ' + error.message);
-        setMessage(error.message);
+        showError('Error loading orders', error.message);
       } finally {
         setOrdersLoading(false);
       }
@@ -206,12 +222,84 @@ async function runOrderAction(action, command) {
     await loadRestaurantOrders();
 
   } catch (error) {
-    addLog(action + ' failed: ' + error.message);
-    setMessage(action + ' failed: ' + error.message);
+    showError(action + ' failed', error.message);
   } finally {
     actionInFlight.current = false;
     setPendingAction(null);
   }
+}
+
+// Runs one command (cancel, availability, pause/reopen); `afterSuccess` refreshes what the command changed
+async function runCommand(action, command, afterSuccess) {
+  // Prevent duplicate commands while another request is running
+  if (actionInFlight.current) return;
+
+  actionInFlight.current = true;
+  setPendingAction(action);
+  setMessage(action + ' in progress...');
+
+  try {
+    const csrfToken = await getCsrfToken();
+    await command(csrfToken);
+
+    addLog(action + ' successful');
+    setMessage(action + ' successful');
+
+    if (afterSuccess) await afterSuccess();
+  } catch (error) {
+    showError(action + ' failed', error.message);
+  } finally {
+    actionInFlight.current = false;
+    setPendingAction(null);
+  }
+}
+
+// Customer: own orders (UC-ORD-07 follow progress)
+async function loadCustomerOrders() {
+  setCustomerOrdersLoading(true);
+  try {
+    const data = await getCustomerOrders();
+    setCustomerOrders(data);
+    addLog('Your orders loaded (' + data.length + ' orders)');
+  } catch (error) {
+    showError('Error loading your orders', error.message);
+  } finally {
+    setCustomerOrdersLoading(false);
+  }
+}
+
+// Customer: UC-ORD-03 cancel while PLACED
+function handleCancelOrder(orderId) {
+  return runCommand(
+    'Cancel order #' + orderId,
+    csrfToken => cancelOrder(orderId, csrfToken),
+    loadCustomerOrders
+  );
+}
+
+// Restaurant (own menu): UC-ORD-05 item availability
+function handleToggleAvailability(item) {
+  const restaurantId = selectedRestaurantId;
+  const soldOut = item.status === 'AVAILABLE';
+  return runCommand(
+    (soldOut ? 'Mark sold out: ' : 'Mark available: ') + item.name,
+    csrfToken => soldOut
+      ? markItemSoldOut(restaurantId, item.itemId, csrfToken)
+      : markItemAvailable(restaurantId, item.itemId, csrfToken),
+    () => loadMenu(restaurantId)
+  );
+}
+
+// Restaurant (own) and operator (any): UC-ORD-06 pause / reopen
+function handleRestaurantStatus(restaurant) {
+  const pausing = restaurant.status === 'OPEN';
+  return runCommand(
+    (pausing ? 'Pause ' : 'Reopen ') + restaurant.name,
+    csrfToken => pausing
+      ? pauseRestaurant(restaurant.restaurantId, csrfToken)
+      : reopenRestaurant(restaurant.restaurantId, csrfToken),
+    loadRestaurants
+  );
 }
 
 function startReject(orderId) {
@@ -228,8 +316,7 @@ async function handleReject(orderId) {
   const reason = rejectionReason.trim();
 
   if (!reason) {
-    addLog('Reject failed: a rejection reason is required');
-    setMessage('A rejection reason is required.');
+    showError('Reject failed', 'A rejection reason is required.');
     return;
   }
 
@@ -241,7 +328,12 @@ async function handleReject(orderId) {
 function openMenuTab() {
   if (selectedRestaurantId === null) {
     addLog('Menu: no restaurant selected');
-    setNotice('Please select a restaurant first to view its menu.');
+    // The only pop-up whose OK takes the user somewhere: back to the restaurants to pick one
+    setNotice({
+      title: 'No restaurant selected',
+      message: 'Please select a restaurant first to view its menu.',
+      returnTab: 'restaurants'
+    });
     return;
   }
   setActiveTab('menu');
@@ -250,16 +342,17 @@ function openMenuTab() {
 // Restaurant staff: open the menu of their own restaurant only
 function openMyMenu() {
   if (currentUser?.restaurantId == null) {
-    addLog('Error loading menu: no restaurant is assigned to this account');
-    setMessage('No restaurant is assigned to this account.');
+    showError('Error loading menu', 'No restaurant is assigned to this account.');
     return;
   }
   loadMenu(currentUser.restaurantId);
 }
 
+// OK closes the pop-up and keeps the user on the same tab, unless the pop-up says where to go
 function closeNotice() {
+  const returnTab = notice?.returnTab;
   setNotice(null);
-  setActiveTab('restaurants');
+  if (returnTab) setActiveTab(returnTab);
 }
 
 // Only shown on the order whose turn it is (RestaurantOrderView decides), so no pop-up is needed
@@ -315,6 +408,8 @@ async function handleStartPreparation(order) {
       if (loginAccepted) {
         const user = await getCurrentUser();
         setOrders([]);
+        setCustomerOrders([]);
+        setNotice(null);
         setCurrentUser(user);
         setLogs([]);
         setLoggedIn(true);
@@ -346,13 +441,15 @@ async function handleStartPreparation(order) {
         setSelectedRestaurantId(null);
         setQuantities({});
         setOrders([]);
+        setCustomerOrders([]);
+        setNotice(null);
         setActiveTab('restaurants');
         setMessage('Logged out successfully');
       } else {
-        setMessage('Logout failed');
+        showError('Logout failed', 'The server did not end the session. Please try again.');
       }
     } catch (error) {
-      setMessage('Logout request failed');
+      showError('Logout failed', 'Could not reach the server. Please try again.');
       console.error(error);
     }
   }
@@ -414,6 +511,16 @@ async function handleStartPreparation(order) {
                 {selectedRestaurant && activeTab !== 'menu'
                   ? 'View previous menu: ' + selectedRestaurant.name
                   : 'Menu'}
+              </button>
+            )}
+
+            {isCustomer && (
+              <button
+                type="button"
+                className={activeTab === 'myorders' ? 'active' : ''}
+                onClick={() => setActiveTab('myorders')}
+              >
+                My Orders
               </button>
             )}
 
@@ -485,6 +592,17 @@ async function handleStartPreparation(order) {
                         View Menu
                       </button>
                     )}
+
+                    {/* UC-ORD-06 / R-DASH-01: the operator pauses or reopens any restaurant */}
+                    {role === 'OPERATOR' && restaurant.status !== 'CLOSED' && (
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => handleRestaurantStatus(restaurant)}
+                      >
+                        {restaurant.status === 'OPEN' ? 'Pause' : 'Reopen'}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -498,10 +616,24 @@ async function handleStartPreparation(order) {
               selectedRestaurantId={selectedRestaurantId}
               menu={menu}
               canOrder={isCustomer}
+              canManage={isRestaurant}
+              busy={pendingAction !== null}
+              onToggleAvailability={handleToggleAvailability}
+              onRestaurantStatus={handleRestaurantStatus}
               quantities={quantities}
               onQuantityChange={(itemId, value) =>
                 setQuantities(previous => ({ ...previous, [itemId]: value }))}
               onPlaceOrder={handlePlaceOrder}
+            />
+          )}
+
+          {activeTab === 'myorders' && isCustomer && (
+            <CustomerOrderView
+              orders={customerOrders}
+              loading={customerOrdersLoading}
+              busy={pendingAction !== null}
+              onRefresh={loadCustomerOrders}
+              onCancel={handleCancelOrder}
             />
           )}
 
@@ -546,8 +678,9 @@ async function handleStartPreparation(order) {
 
           {notice && (
             <div className="notice-backdrop">
-              <div className="notice-box" role="alertdialog" aria-modal="true" aria-label="Notice">
-                <p>{notice}</p>
+              <div className="notice-box" role="alertdialog" aria-modal="true" aria-label={notice.title}>
+                <h4>{notice.title}</h4>
+                <p>{notice.message}</p>
                 <button type="button" onClick={closeNotice} autoFocus>
                   OK
                 </button>

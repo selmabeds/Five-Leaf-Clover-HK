@@ -8,12 +8,19 @@ import OrderView from './OrderView';
  * with one OrderView per item to place an order. Only customers may place
  * orders (Spec Appendix A, R-DASH-01), so `canOrder` is false for restaurant
  * staff viewing their own menu: no ordering controls are shown at all.
+ *
+ * Restaurant staff (`canManage`) instead manage their own menu: item
+ * availability (UC-ORD-05) and pausing / reopening the restaurant (UC-ORD-06).
  */
 export default function MenuView({
   selectedRestaurant,
   selectedRestaurantId,
   menu,
   canOrder,
+  canManage,
+  busy,
+  onToggleAvailability,
+  onRestaurantStatus,
   quantities,
   onQuantityChange,
   onPlaceOrder
@@ -35,8 +42,20 @@ export default function MenuView({
         </p>
       )}
 
-      {!canOrder && selectedRestaurant && (
-        <p className="menu-notice">Restaurant status: {selectedRestaurant.status}</p>
+      {/* UC-ORD-06: restaurant staff pause / reopen their own restaurant */}
+      {canManage && selectedRestaurant && (
+        <div className="menu-notice restaurant-status-bar">
+          <span>Restaurant status: {selectedRestaurant.status}</span>
+          {selectedRestaurant.status !== 'CLOSED' && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => onRestaurantStatus(selectedRestaurant)}
+            >
+              {selectedRestaurant.status === 'OPEN' ? 'Pause Restaurant' : 'Reopen Restaurant'}
+            </button>
+          )}
+        </div>
       )}
 
       {menu.map(item => {
@@ -60,6 +79,17 @@ export default function MenuView({
 
             {canOrder && soldOut && !restaurantClosed && (
               <span className="menu-item-note">Sold out</span>
+            )}
+
+            {/* UC-ORD-05: restaurant staff mark their items sold out / available */}
+            {canManage && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => onToggleAvailability(item)}
+              >
+                {soldOut ? 'Mark Available' : 'Mark Sold Out'}
+              </button>
             )}
           </div>
         );
