@@ -495,6 +495,8 @@ async function handleStartPreparation(order) {
   const isRestaurant = role === 'RESTAURANT';
   // Customers browse menus; operators see restaurant statuses (pause/reopen any restaurant)
   const canSeeRestaurantList = isCustomer || role === 'OPERATOR';
+  // The Orders tab groups the menu and order screens (customer: Menu / My Orders; restaurant: Restaurant Orders / My Menu)
+  const inOrdersTab = ['menu', 'myorders', 'orders'].includes(activeTab);
 
   // Info area "selected restaurant": staff = their own restaurant; customer = the menu they opened
   const infoRestaurant = isRestaurant
@@ -515,27 +517,51 @@ async function handleStartPreparation(order) {
             stats={infoRestaurant ? queueSummary[infoRestaurant.restaurantId] : undefined}
           />
 
+          {/* Spec DASH › Goal: "A horizontal tab bar for the modules (Map, Orders, Delivery, Pricing & History)".
+              Each role only sees the tabs it may use (R-DASH-01). */}
           <nav className="dashboard-tabs">
-            {['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
-  <button
-    type="button"
-    className={activeTab === 'delivery' ? 'active' : ''}
-    onClick={() => setActiveTab('delivery')}
-  >
-    {currentUser.role === 'COURIER' ? 'Delivery' : 'Dispatch'}
-  </button>
-)}
             {canSeeRestaurantList && (
               <button
                 type="button"
                 className={activeTab === 'restaurants' ? 'active' : ''}
                 onClick={() => setActiveTab('restaurants')}
               >
-                Restaurants
+                Map
               </button>
             )}
 
-            {isCustomer && (
+            {(isCustomer || isRestaurant) && (
+              <button
+                type="button"
+                className={inOrdersTab ? 'active' : ''}
+                onClick={() => setActiveTab(isRestaurant ? 'orders' : 'myorders')}
+              >
+                Orders
+              </button>
+            )}
+
+            {['COURIER', 'OPERATOR'].includes(role) && (
+              <button
+                type="button"
+                className={activeTab === 'delivery' ? 'active' : ''}
+                onClick={() => setActiveTab('delivery')}
+              >
+                Delivery
+              </button>
+            )}
+
+            <button
+              type="button"
+              className={activeTab === 'logs' ? 'active' : ''}
+              onClick={() => setActiveTab('logs')}
+            >
+              Pricing & History
+            </button>
+          </nav>
+
+          {/* Orders tab: one sub-bar per role */}
+          {inOrdersTab && isCustomer && (
+            <div className="category-tabs sub-tabs">
               <button
                 type="button"
                 className={activeTab === 'menu' ? 'active' : ''}
@@ -545,9 +571,7 @@ async function handleStartPreparation(order) {
                   ? 'View previous menu: ' + selectedRestaurant.name
                   : 'Menu'}
               </button>
-            )}
 
-            {isCustomer && (
               <button
                 type="button"
                 className={activeTab === 'myorders' ? 'active' : ''}
@@ -555,20 +579,11 @@ async function handleStartPreparation(order) {
               >
                 My Orders
               </button>
-            )}
+            </div>
+          )}
 
-            {/* Restaurant staff only see their own menu (Appendix A: not other restaurants' menus) */}
-            {isRestaurant && (
-              <button
-                type="button"
-                className={activeTab === 'menu' ? 'active' : ''}
-                onClick={openMyMenu}
-              >
-                My Menu
-              </button>
-            )}
-
-            {currentUser?.role === 'RESTAURANT' && (
+          {inOrdersTab && isRestaurant && (
+            <div className="category-tabs sub-tabs">
               <button
                 type="button"
                 className={activeTab === 'orders' ? 'active' : ''}
@@ -576,16 +591,17 @@ async function handleStartPreparation(order) {
               >
                 Restaurant Orders
               </button>
-            )}
 
-            <button
-              type="button"
-              className={activeTab === 'logs' ? 'active' : ''}
-              onClick={() => setActiveTab('logs')}
-            >
-              Activity Log
-            </button>
-          </nav>
+              {/* Restaurant staff only see their own menu (Appendix A: not other restaurants' menus) */}
+              <button
+                type="button"
+                className={activeTab === 'menu' ? 'active' : ''}
+                onClick={openMyMenu}
+              >
+                My Menu
+              </button>
+            </div>
+          )}
 
           
           {activeTab === 'restaurants' && canSeeRestaurantList && (

@@ -326,6 +326,12 @@ body {
   color: #54453e;
 }
 
+/* Sub-bar inside the Orders tab */
+
+.sub-tabs {
+  margin: -8px 0 16px;
+}
+
 /* Info area (Spec DASH › Goal) */
 
 .info-area {
