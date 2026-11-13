@@ -1,3 +1,4 @@
+
 services:
   postgres:
     image: postgres:17
@@ -5,10 +6,39 @@ services:
       POSTGRES_DB: careeats
       POSTGRES_USER: careeats
       POSTGRES_PASSWORD: local-development-only
-    ports:
-      - "127.0.0.1:5433:5432"
     volumes:
       - careeats-local:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U careeats -d careeats"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: supabase
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/careeats
+      SPRING_DATASOURCE_USERNAME: careeats
+      SPRING_DATASOURCE_PASSWORD: local-development-only
+      CAREEATS_MIGRATE: "true"
+      CAREEATS_SEED_ENABLED: "true"
+      CAREEATS_MIGRATION_USERNAME: careeats
+      CAREEATS_MIGRATION_PASSWORD: local-development-only
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    ports:
+      - "127.0.0.1:5173:80"
+    depends_on:
+      - backend
 
 volumes:
   careeats-local:
