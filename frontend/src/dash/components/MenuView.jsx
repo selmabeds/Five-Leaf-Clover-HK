@@ -66,6 +66,10 @@ export default function MenuView({
             <p>
               {item.name} - ${item.price} - {item.status}
             </p>
+            <p>
+              <strong>Ingredients:</strong>{' '}
+              {item.ingredients?.length ? item.ingredients.join(', ') : 'No ingredients listed'}
+            </p>
 
             {canOrder && (
               <OrderView

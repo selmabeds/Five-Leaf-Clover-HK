@@ -1,4 +1,6 @@
 
+import DietaryChecklist from './DietaryChecklist';
+
 /**
  * DASH UI layer: CARE Eats Login.
  *
@@ -12,6 +14,8 @@ export default function LoginView({
   email,
   password,
   registrationPending,
+  dietaryRestrictions,
+  onDietaryRestrictionsChange,
   message,
   onNameChange,
   onEmailChange,
@@ -59,6 +63,14 @@ export default function LoginView({
           disabled={registrationPending}
           required
         />
+
+        {signingUp && (
+          <details>
+            <summary>Dietary preferences (optional)</summary>
+            <DietaryChecklist selected={dietaryRestrictions}
+              onChange={onDietaryRestrictionsChange} disabled={registrationPending} />
+          </details>
+        )}
 
         <button type="submit" disabled={registrationPending}>
           {registrationPending ? 'Creating account…' : signingUp ? 'Sign Up' : 'Log In'}

@@ -3,6 +3,7 @@ import './App.css';
 import PrcConsole from './prc/PrcConsole';
 import DeliveryConsole from './dlv/DeliveryConsole';
 import LoginView from './dash/components/LoginView';
+import ProfileView from './dash/components/ProfileView';
 import MenuView from './dash/components/MenuView';
 import RestaurantOrderView from './dash/components/RestaurantOrderView';
 import {
@@ -14,6 +15,7 @@ import {
 } from './dash/services/authService';
 import {
   getRestaurants,
+  getDietaryRecommendations,
   getMenu,
   placeOrder,
   getRestaurantOrders,
@@ -88,6 +90,10 @@ const categories = [
   const [orders, setOrders] = useState([]);
   const [activeTab, setActiveTab] = useState('restaurants');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [signupRestrictions, setSignupRestrictions] = useState([]);
+  const [recommendations, setRecommendations] = useState(null);
+  const [recommendationError, setRecommendationError] = useState('');
+  const recommendationRequest = useRef(null);
   const [pendingAction, setPendingAction] = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
   // In-page pop-up (browser pop-ups like window.alert can be blocked):
@@ -171,9 +177,25 @@ const categories = [
     }
   }
 
-  async function loadMenu(restaurantId) {
+  async function showForYou() {
+    const request = {};
+    recommendationRequest.current = request;
+    setSelectedCategory('For You');
+    setRecommendations(null);
+    setRecommendationError('');
     try {
-      const data = await getMenu(restaurantId);
+      const data = await getDietaryRecommendations();
+      if (recommendationRequest.current === request) setRecommendations(data);
+    } catch (error) {
+      if (recommendationRequest.current === request) setRecommendationError(error.message);
+    }
+  }
+
+  async function loadMenu(restaurantId, personalized = false) {
+    try {
+      const data = personalized
+        ? (await getDietaryRecommendations()).menus[restaurantId] ?? []
+        : await getMenu(restaurantId);
 
       setMenu(data);
       setSelectedRestaurantId(restaurantId);
@@ -463,7 +485,9 @@ async function handleStartPreparation(order) {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const response = await register({ name: name.trim(), email: normalizedEmail, password });
+      const response = await register({
+        name: name.trim(), email: normalizedEmail, password, dietaryRestrictions: signupRestrictions,
+      });
 
       if (response.status === 400) {
         setMessage((await response.text()) || 'Check your registration details and try again.');
@@ -476,6 +500,7 @@ async function handleStartPreparation(order) {
 
       setEmail(normalizedEmail);
       setName('');
+      setSignupRestrictions([]);
       switchAuthMode(false);
       setMessage('Account created. Log in with your new password.');
     } catch {
@@ -520,6 +545,10 @@ async function handleStartPreparation(order) {
       const loggedOut = await logout();
 
       if (loggedOut) {
+        recommendationRequest.current = null;
+        setSelectedCategory('All');
+        setRecommendations(null);
+        setRecommendationError('');
         addLog('Logout successful: ' + email);
         setLoggedIn(false);
         setCurrentUser(null);
@@ -547,6 +576,9 @@ async function handleStartPreparation(order) {
   }
 
     const filteredRestaurants = restaurants.filter(restaurant => {
+    if (selectedCategory === 'For You') {
+      return Boolean(recommendations?.menus[restaurant.restaurantId]);
+    }
     if (selectedCategory === 'All') {
       return true;
     }
@@ -579,7 +611,6 @@ async function handleStartPreparation(order) {
       <div className="dashboard-container">
         <div className="dashboard-panel">
           <h1>CARE Eats</h1>
-          <h2>Dashboard</h2>
 
           <InfoArea
             user={currentUser}
@@ -630,6 +661,12 @@ async function handleStartPreparation(order) {
             >
               Pricing & History
             </button>
+            {isCustomer && (
+              <button type="button" className={activeTab === 'profile' ? 'active' : ''}
+                onClick={() => setActiveTab('profile')}>
+                Profile
+              </button>
+            )}
           </nav>
 
           {/* Orders tab: one sub-bar per role */}
@@ -697,22 +734,41 @@ async function handleStartPreparation(order) {
             </section>
           )}
 
+          {isCustomer && activeTab === 'profile' && (
+            <ProfileView key={currentUser.userId} onSaved={() => setSelectedCategory('All')} />
+          )}
+
           {activeTab === 'restaurants' && canSeeRestaurantList && (
             <section>
               <h3>Explore Restaurants</h3>
 
               <div className="category-tabs">
-                {categories.map(category => (
+                {(isCustomer ? ['All', 'For You'] : categories).map(category => (
                   <button
                     key={category}
                     type="button"
                     className={selectedCategory === category ? 'active' : ''}
-                    onClick={() => setSelectedCategory(category)}
+                    onClick={() => category === 'For You' ? showForYou() : setSelectedCategory(category)}
                   >
                     {category}
                   </button>
                 ))}
               </div>
+
+              {selectedCategory === 'For You' && (
+                <div>
+                  {recommendationError && <p role="alert">{recommendationError}</p>}
+                  {!recommendations && !recommendationError && <p role="status">Loading recommendations…</p>}
+                  {recommendations && (
+                    <>
+                      {recommendations.dietaryRestrictions.length === 0
+                        ? <p>Choose your dietary preferences in Profile to get recommendations.</p>
+                        : filteredRestaurants.length === 0 && <p>No available dishes match all your saved preferences.</p>}
+                      <button type="button" onClick={() => setActiveTab('profile')}>Edit Dietary Preferences</button>
+                    </>
+                  )}
+                </div>
+              )}
 
               <div className="restaurant-grid">
                 {filteredRestaurants.map(restaurant => (
@@ -735,7 +791,7 @@ async function handleStartPreparation(order) {
                     {isCustomer && (
                       <button
                         type="button"
-                        onClick={() => loadMenu(restaurant.restaurantId)}
+                        onClick={() => loadMenu(restaurant.restaurantId, selectedCategory === 'For You')}
                       >
                         View Menu
                       </button>
@@ -862,6 +918,8 @@ async function handleStartPreparation(order) {
       email={email}
       password={password}
       registrationPending={registrationPending}
+      dietaryRestrictions={signupRestrictions}
+      onDietaryRestrictionsChange={setSignupRestrictions}
       message={message}
       onNameChange={setName}
       onEmailChange={setEmail}

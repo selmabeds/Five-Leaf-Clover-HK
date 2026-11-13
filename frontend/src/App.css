@@ -77,6 +77,28 @@ body {
   border-color: #917e70;
 }
 
+.dietary-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid #ddd5cd;
+  border-radius: 10px;
+}
+
+.dietary-checklist label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.dietary-checklist input[type="checkbox"] {
+  width: auto;
+  accent-color: #756359;
+}
+
 .login-form button {
   width: 100%;
   padding: 15px;
