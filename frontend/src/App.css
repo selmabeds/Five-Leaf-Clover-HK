@@ -195,6 +195,391 @@ body {
   margin-top: 8px;
 }
 
+/* Restaurant orders list */
+
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.order-card {
+  padding: 16px 20px;
+  background-color: #f0ece7;
+  border: 1px solid #ded7cf;
+  border-radius: 14px;
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-number {
+  font-weight: 600;
+  color: #54453e;
+}
+
+.order-status {
+  padding: 4px 10px;
+  background-color: #e3dbd2;
+  color: #54453e;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.order-actions:empty {
+  display: none;
+}
+
+.orders-empty {
+  margin-top: 16px;
+  color: #97877d;
+}
+
+.menu-notice {
+  padding: 10px 14px;
+  background-color: #f0ece7;
+  border: 1px solid #ded7cf;
+  border-radius: 10px;
+  color: #54453e;
+}
+
+.menu-item-note {
+  margin-left: 8px;
+  color: #97877d;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.order-note {
+  margin: 0;
+  color: #97877d;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.reject-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.reject-form input {
+  flex: 1 1 220px;
+  padding: 10px 12px;
+  border: 1px solid #ded7cf;
+  border-radius: 10px;
+  font-family: inherit;
+}
+
+.dashboard-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* In-page pop-up (works even when the browser blocks pop-ups) */
+
+.notice-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(72, 60, 51, 0.35);
+  z-index: 1000;
+}
+
+.notice-box {
+  width: 100%;
+  max-width: 380px;
+  padding: 24px;
+  background-color: #f8f6f2;
+  border: 1px solid #ded7cf;
+  border-radius: 16px;
+  box-shadow: 0 12px 35px rgba(72, 60, 51, 0.2);
+  text-align: center;
+}
+
+.notice-box h4 {
+  margin: 0 0 8px;
+  color: #54453e;
+  font-size: 17px;
+}
+
+.notice-box p {
+  margin: 0 0 16px;
+  color: #54453e;
+  white-space: pre-line;
+}
+
+/* City map (Spec DASH › Map view) */
+
+.map-container {
+  position: relative;
+  margin-bottom: 24px;
+}
+
+.map-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background-color: #f0ece7;
+  border: 1px solid #ded7cf;
+  border-radius: 14px;
+}
+
+.map-grid line {
+  stroke: #ded7cf;
+  stroke-width: 1;
+}
+
+.map-axis {
+  fill: #97877d;
+  font-size: 14px;
+}
+
+.map-restaurant {
+  cursor: pointer;
+}
+
+.map-restaurant circle {
+  stroke: #54453e;
+  stroke-width: 1.5;
+}
+
+.map-restaurant.selected circle,
+.map-restaurant:focus circle {
+  stroke-width: 3.5;
+}
+
+.map-restaurant:focus {
+  outline: none;
+}
+
+/* Initials inside the restaurant marker */
+.map-restaurant text {
+  fill: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+/* Restaurant marker fill = R-DASH-03 band (map circles and legend dots use the same colours) */
+.map-restaurant.marker-short circle { fill: #5a9e66; }
+.map-restaurant.marker-building circle { fill: #e0a43a; }
+.map-restaurant.marker-long circle { fill: #c0453a; }
+.map-restaurant.marker-building text { fill: #3b2a12; }
+
+/* Legend above the map */
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  color: #54453e;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid #54453e;
+}
+
+.legend-dot.marker-short { background-color: #5a9e66; }
+.legend-dot.marker-building { background-color: #e0a43a; }
+.legend-dot.marker-long { background-color: #c0453a; }
+
+.legend-courier {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background-color: #54453e;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+/* Courier marker = dark circle with state badge (I / A / C) */
+.map-courier circle {
+  fill: #54453e;
+  stroke: #f8f6f2;
+  stroke-width: 1.5;
+}
+
+.map-courier text {
+  fill: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  pointer-events: none;
+}
+
+.map-details {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: min(320px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  overflow-y: auto;
+  padding: 16px;
+  background-color: #f8f6f2;
+  border: 1px solid #ded7cf;
+  border-radius: 14px;
+  box-shadow: 0 12px 35px rgba(72, 60, 51, 0.2);
+  text-align: left;
+}
+
+.map-details-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.map-details-header h4 {
+  margin: 0;
+  color: #54453e;
+}
+
+.map-details p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #54453e;
+}
+
+.map-details-orders {
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #54453e;
+}
+
+.map-details-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.map-empty {
+  padding: 32px 16px;
+  margin-bottom: 24px;
+  background-color: #f0ece7;
+  border: 1px dashed #ded7cf;
+  border-radius: 14px;
+  color: #97877d;
+}
+
+/* Sub-bar inside the Orders tab */
+
+.sub-tabs {
+  margin: -8px 0 16px;
+}
+
+/* Info area (Spec DASH › Goal) */
+
+.info-area {
+  margin: 12px 0 20px;
+  padding: 12px 16px;
+  background-color: #f0ece7;
+  border: 1px solid #ded7cf;
+  border-radius: 14px;
+}
+
+.info-user {
+  margin: 0;
+  color: #54453e;
+}
+
+.info-reset {
+  margin-top: 10px;
+}
+
+.notice-actions {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.info-restaurant {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 8px 16px;
+  margin-top: 10px;
+  font-size: 14px;
+  color: #54453e;
+}
+
+.info-restaurant-name {
+  font-weight: 600;
+}
+
+/* R-DASH-03 preparation-queue bands (text label + colour) */
+
+.queue-band {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.queue-short {
+  background-color: #e3f1e5;
+  color: #2f6b3a;
+  border-color: #b9dcbf;
+}
+
+.queue-building {
+  background-color: #fbefd9;
+  color: #8a5a12;
+  border-color: #efd29c;
+}
+
+.queue-long {
+  background-color: #f8e1de;
+  color: #9b2c22;
+  border-color: #eab5ae;
+}
+
+.restaurant-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 /* Main dashboard navigation tabs */
 
 .dashboard-tabs {

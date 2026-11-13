@@ -2,6 +2,49 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import PrcConsole from './prc/PrcConsole';
 import DeliveryConsole from './dlv/DeliveryConsole';
+import LoginView from './dash/components/LoginView';
+import MenuView from './dash/components/MenuView';
+import RestaurantOrderView from './dash/components/RestaurantOrderView';
+import {
+  getCsrfToken,
+  login,
+  getCurrentUser,
+  logout,
+  register
+} from './dash/services/authService';
+import {
+  getRestaurants,
+  getMenu,
+  placeOrder,
+  getRestaurantOrders,
+  acceptOrder,
+  rejectOrder,
+  startPreparation,
+  markOrderReady,
+  getCustomerOrders,
+  cancelOrder,
+  markItemSoldOut,
+  markItemAvailable,
+  pauseRestaurant,
+  reopenRestaurant,
+  getQueueSummary,
+  resetSystem
+} from './dash/services/orderService';
+import CustomerOrderView from './dash/components/CustomerOrderView';
+import QueueBand from './dash/components/QueueBand';
+import InfoArea from './dash/components/InfoArea';
+import MapView from './dash/components/MapView';
+import { getOnDutyCouriers } from './dash/services/deliveryService';
+// Reused as-is from the PRC module (read only): the order summary / receipt after delivery
+import { loadReceipt } from './prc/prcApi.mjs';
+import { formatReceipt } from './prc/prcFormatters.mjs';
+
+// First tab each role sees after login (R-DASH-01: only what the role may do)
+function defaultTabFor(role) {
+  if (role === 'RESTAURANT') return 'orders';
+  if (role === 'COURIER' || role === 'OPERATOR') return 'delivery';
+  return 'restaurants';
+}
 
 function App() {
   const restaurantCategories = {
@@ -47,12 +90,27 @@ const categories = [
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [pendingAction, setPendingAction] = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  // In-page pop-up (browser pop-ups like window.alert can be blocked):
+  // { title, message, returnTab } — a new one replaces the previous one, so pop-ups never stack
+  const [notice, setNotice] = useState(null);
+  // Customer's own orders (My Orders tab)
+  const [customerOrders, setCustomerOrders] = useState([]);
+  const [customerOrdersLoading, setCustomerOrdersLoading] = useState(false);
+  // R-DASH-03: queued / preparing / ready counts per restaurant id
+  const [queueSummary, setQueueSummary] = useState({});
+  // Map: on-duty couriers (R-DASH-02) and the restaurant whose details panel is open
+  const [couriers, setCouriers] = useState([]);
+  const [mapSelectedId, setMapSelectedId] = useState(null);
+  // Order currently being rejected, and the reason typed for it
+  const [rejectingOrderId, setRejectingOrderId] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const actionInFlight = useRef(false);
   const orderLoadInFlight = useRef(null);
 
     useEffect(() => {
     if (loggedIn) {
       loadRestaurants();
+      loadQueueSummary();
     }
   }, [loggedIn]);
 
@@ -60,63 +118,62 @@ const categories = [
     if (loggedIn && activeTab === 'orders') {
       loadRestaurantOrders();
     }
+    if (loggedIn && activeTab === 'myorders') {
+      loadCustomerOrders();
+    }
+    // Map tab: fresh city state every time it is shown (Spec ORD: "after each action, the map… reflect[s] the new state")
+    if (loggedIn && activeTab === 'restaurants') {
+      loadRestaurants();
+      loadQueueSummary();
+      loadCouriers();
+      // Restaurant staff see their own order queue in the details panel
+      if (currentUser?.role === 'RESTAURANT') loadRestaurantOrders();
+    }
   }, [loggedIn, activeTab]);
 
   function addLog(message) {
     setLogs(previous => [...previous, message]);
   }
 
-  async function getCsrfToken() {
-    const response = await fetch('/login', {
-      credentials: 'include'
-    });
-
-    if (!response.ok) {
-      throw new Error('Cannot load login page');
-    }
-
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const token = doc.querySelector('input[name="_csrf"]')?.value;
-
-    if (!token) {
-      throw new Error('CSRF token not found');
-    }
-
-    return token;
+  // Course feedback + UC-ORD-09: errors pop up in the user's face, and are still logged (R-DASH-06)
+  function showError(title, errorMessage) {
+    addLog(title + ': ' + errorMessage);
+    setMessage(title + ': ' + errorMessage);
+    setNotice({ title, message: errorMessage });
   }
 
   async function loadRestaurants() {
     try {
-      const response = await fetch('/api/restaurants', {
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error('Could not load restaurants');
-      }
-
-      const data = await response.json();
+      const data = await getRestaurants();
       setRestaurants(data);
       addLog('Restaurants loaded');
     } catch (error) {
-      addLog('Error loading restaurants: ' + error.message);
-      setMessage(error.message);
+      showError('Error loading restaurants', error.message);
+    }
+  }
+
+  // R-DASH-02: on-duty couriers for the map (read only, from DLV)
+  async function loadCouriers() {
+    try {
+      setCouriers(await getOnDutyCouriers());
+    } catch (error) {
+      showError('Error loading couriers', error.message);
+    }
+  }
+
+  // R-DASH-03 read model: counts per restaurant, keyed by restaurant id
+  async function loadQueueSummary() {
+    try {
+      const data = await getQueueSummary();
+      setQueueSummary(Object.fromEntries(data.map(entry => [entry.restaurantId, entry])));
+    } catch (error) {
+      showError('Error loading preparation queues', error.message);
     }
   }
 
   async function loadMenu(restaurantId) {
     try {
-      const response = await fetch(
-        `/api/restaurants/${restaurantId}/menu`,
-        { credentials: 'include' }
-      );
-
-      if (!response.ok) {
-        throw new Error('Could not load menu');
-      }
-
-      const data = await response.json();
+      const data = await getMenu(restaurantId);
 
       setMenu(data);
       setSelectedRestaurantId(restaurantId);
@@ -124,60 +181,47 @@ const categories = [
 
       addLog('Menu loaded for restaurant ' + restaurantId);
     } catch (error) {
-      addLog('Error loading menu: ' + error.message);
-      setMessage(error.message);
+      showError('Error loading menu', error.message);
     }
   }
 
-  async function placeOrder(menuItemId) {
+  async function handlePlaceOrder(menuItemId) {
     try {
       const csrfToken = await getCsrfToken();
 
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken
-        },
-        body: JSON.stringify({
-          restaurantId: selectedRestaurantId,
-          orderLines: [
-            {
-              menuItemId: menuItemId,
-              quantity: Number(quantities[menuItemId] ?? 1)
-            }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText);
-      }
-
-      const order = await response.json();
+      const order = await placeOrder({
+        restaurantId: selectedRestaurantId,
+        orderLines: [
+          {
+            menuItemId: menuItemId,
+            quantity: Number(quantities[menuItemId] ?? 1)
+          }
+        ]
+      }, csrfToken);
 
       addLog('Order placed successfully: #' + order.orderId);
       setMessage('Order placed successfully: #' + order.orderId);
     } catch (error) {
-      addLog('Order placement failed: ' + error.message);
-      setMessage('Order placement failed: ' + error.message);
+      showError('Order placement failed', error.message);
     }
   }
 
   async function loadRestaurantOrders() {
     if (orderLoadInFlight.current) return orderLoadInFlight.current;
+    const restaurantId = currentUser?.restaurantId;
+    if (restaurantId == null) {
+      setOrders([]);
+      showError('Error loading orders', 'No restaurant is assigned to this account.');
+      return;
+    }
     setOrdersLoading(true);
     const request = (async () => {
       try {
-        const response = await fetch('/api/restaurants/1/orders', { credentials: 'include' });
-        if (!response.ok) throw new Error(await response.text());
-        setOrders(await response.json());
-        addLog('Restaurant orders loaded');
+        const data = await getRestaurantOrders(restaurantId);
+        setOrders(data);
+        addLog('Restaurant orders loaded for restaurant ' + restaurantId + ' (' + data.length + ' orders)');
       } catch (error) {
-        addLog('Error loading orders: ' + error.message);
-        setMessage(error.message);
+        showError('Error loading orders', error.message);
       } finally {
         setOrdersLoading(false);
       }
@@ -191,7 +235,8 @@ const categories = [
   }
 
 
-async function runOrderAction(url, action, rejectionReason = null) {
+// Runs one restaurant-order command; `command` is an orderService.js call that receives the CSRF token
+async function runOrderAction(action, command) {
   // Prevent duplicate actions while another request is running
   if (actionInFlight.current) return;
 
@@ -205,27 +250,7 @@ async function runOrderAction(url, action, rejectionReason = null) {
     }
 
     const csrfToken = await getCsrfToken();
-
-    const response = await fetch(url, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-CSRF-TOKEN': csrfToken
-      },
-      ...(action === 'Reject'
-        ? { body: JSON.stringify({ reason: rejectionReason }) }
-        : {})
-    });
-
-
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-
-    const order = await response.json();
-
-   
+    const order = await command(csrfToken);
 
     setOrders(previous =>
       previous.map(existing =>
@@ -237,71 +262,189 @@ async function runOrderAction(url, action, rejectionReason = null) {
     setMessage(action + ' successful');
 
     await loadRestaurantOrders();
+    // Quick stats / queue band follow the order's new state
+    await loadQueueSummary();
 
   } catch (error) {
-    addLog(action + ' failed: ' + error.message);
-    setMessage(action + ' failed: ' + error.message);
+    showError(action + ' failed', error.message);
   } finally {
     actionInFlight.current = false;
     setPendingAction(null);
   }
 }
 
-async function handleReject(orderId) {
-  const reason = window.prompt(
-    'Please enter a reason for rejecting this order:'
-  );
+// Runs one command (cancel, availability, pause/reopen); `afterSuccess` refreshes what the command changed
+async function runCommand(action, command, afterSuccess) {
+  // Prevent duplicate commands while another request is running
+  if (actionInFlight.current) return;
 
-  if (reason === null) {
-    return;
+  actionInFlight.current = true;
+  setPendingAction(action);
+  setMessage(action + ' in progress...');
+
+  try {
+    const csrfToken = await getCsrfToken();
+    await command(csrfToken);
+
+    addLog(action + ' successful');
+    setMessage(action + ' successful');
+
+    if (afterSuccess) await afterSuccess();
+  } catch (error) {
+    showError(action + ' failed', error.message);
+  } finally {
+    actionInFlight.current = false;
+    setPendingAction(null);
   }
+}
 
-  if (!reason.trim()) {
-    setMessage('A rejection reason is required.');
-    return;
+// Customer: own orders (UC-ORD-07 follow progress)
+async function loadCustomerOrders() {
+  setCustomerOrdersLoading(true);
+  try {
+    const data = await getCustomerOrders();
+    setCustomerOrders(data);
+    addLog('Your orders loaded (' + data.length + ' orders)');
+  } catch (error) {
+    showError('Error loading your orders', error.message);
+  } finally {
+    setCustomerOrdersLoading(false);
   }
+}
 
-  await runOrderAction(
-    `/api/orders/${orderId}/reject`,
-    'Reject',
-    reason.trim()
+// Customer: R-PRC-02 / UC-PRC-02 order summary after delivery (sequence diagram: displayOrderSummary to the Customer)
+async function handleViewSummary(orderId) {
+  try {
+    const receipt = await loadReceipt(orderId);
+    addLog('Order summary viewed: Order #' + orderId);
+    setNotice({ title: 'Order #' + orderId + ' summary', message: formatReceipt(receipt) });
+  } catch (error) {
+    showError('Order summary failed', error.message);
+  }
+}
+
+// Customer: UC-ORD-03 cancel while PLACED
+function handleCancelOrder(orderId) {
+  return runCommand(
+    'Cancel order #' + orderId,
+    csrfToken => cancelOrder(orderId, csrfToken),
+    loadCustomerOrders
   );
 }
 
-async function handleStartPreparation(order) {
-  const acceptedOrders = orders
-    .filter(
-      o =>
-        o.status === 'ACCEPTED' &&
-        o.restaurantId === order.restaurantId
-    )
-    .sort((a, b) => a.orderId - b.orderId);
+// Restaurant (own menu): UC-ORD-05 item availability
+function handleToggleAvailability(item) {
+  const restaurantId = selectedRestaurantId;
+  const soldOut = item.status === 'AVAILABLE';
+  return runCommand(
+    (soldOut ? 'Mark sold out: ' : 'Mark available: ') + item.name,
+    csrfToken => soldOut
+      ? markItemSoldOut(restaurantId, item.itemId, csrfToken)
+      : markItemAvailable(restaurantId, item.itemId, csrfToken),
+    () => loadMenu(restaurantId)
+  );
+}
 
-  if (acceptedOrders.length === 0) {
-    setMessage('No accepted orders waiting.');
+// Restaurant (own) and operator (any): UC-ORD-06 pause / reopen
+function handleRestaurantStatus(restaurant) {
+  const pausing = restaurant.status === 'OPEN';
+  return runCommand(
+    (pausing ? 'Pause ' : 'Reopen ') + restaurant.name,
+    csrfToken => pausing
+      ? pauseRestaurant(restaurant.restaurantId, csrfToken)
+      : reopenRestaurant(restaurant.restaurantId, csrfToken),
+    loadRestaurants
+  );
+}
+
+function startReject(orderId) {
+  setRejectingOrderId(orderId);
+  setRejectionReason('');
+}
+
+function cancelReject() {
+  setRejectingOrderId(null);
+  setRejectionReason('');
+}
+
+async function handleReject(orderId) {
+  const reason = rejectionReason.trim();
+
+  if (!reason) {
+    showError('Reject failed', 'A rejection reason is required.');
     return;
   }
 
-  const nextOrder = acceptedOrders[0];
+  cancelReject();
 
-  if (nextOrder.orderId !== order.orderId) {
-    const confirmed = window.confirm(
-      `Order Queue Warning!\n\n` +
-      `You selected Order #${order.orderId}, ` +
-      `but Order #${nextOrder.orderId} is next in the queue.\n\n` +
-      `Order #${nextOrder.orderId} needs to be prepared first.\n\n` +
-      `Do you want to start Order #${nextOrder.orderId} instead?`
-    );
+  await runOrderAction('Reject', csrfToken => rejectOrder(orderId, reason, csrfToken));
+}
 
-    if (!confirmed) {
-      return;
-    }
+function openMenuTab() {
+  if (selectedRestaurantId === null) {
+    addLog('Menu: no restaurant selected');
+    // The only pop-up whose OK takes the user somewhere: back to the restaurants to pick one
+    setNotice({
+      title: 'No restaurant selected',
+      message: 'Please select a restaurant first to view its menu.',
+      returnTab: 'restaurants'
+    });
+    return;
   }
+  setActiveTab('menu');
+}
 
-  await runOrderAction(
-    `/api/restaurants/${order.restaurantId}/start-next`,
-    'Start Preparation'
-  );
+// Restaurant staff: open the menu of their own restaurant only
+function openMyMenu() {
+  if (currentUser?.restaurantId == null) {
+    showError('Error loading menu', 'No restaurant is assigned to this account.');
+    return;
+  }
+  loadMenu(currentUser.restaurantId);
+}
+
+// OK closes the pop-up and keeps the user on the same tab, unless the pop-up says where to go
+function closeNotice() {
+  const returnTab = notice?.returnTab;
+  setNotice(null);
+  if (returnTab) setActiveTab(returnTab);
+}
+
+// Confirmation pop-up: runs the confirmed command after closing
+function confirmNotice() {
+  const onConfirm = notice?.onConfirm;
+  setNotice(null);
+  if (onConfirm) onConfirm();
+}
+
+// Reset (operator): ask for confirmation first, then restore the initial state
+function handleReset() {
+  setNotice({
+    title: 'Reset the system?',
+    message: 'This removes all orders and deliveries and restores restaurants, menus and couriers to their initial state. Accounts are kept.',
+    confirmLabel: 'Reset',
+    onConfirm: () => runCommand(
+      'Reset',
+      csrfToken => resetSystem(csrfToken),
+      async () => {
+        setMenu([]);
+        setSelectedRestaurantId(null);
+        setQuantities({});
+        setOrders([]);
+        setCustomerOrders([]);
+        setMapSelectedId(null);
+        await loadRestaurants();
+        await loadQueueSummary();
+        await loadCouriers();
+        addLog('System restored to its initial state');
+      }
+    )
+  });
+}
+
+// Only shown on the order whose turn it is (RestaurantOrderView decides), so no pop-up is needed
+async function handleStartPreparation(order) {
+  await runOrderAction('Start Preparation', csrfToken => startPreparation(order.restaurantId, csrfToken));
 }
    
 
@@ -320,16 +463,7 @@ async function handleStartPreparation(order) {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const csrfToken = await getCsrfToken();
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken,
-        },
-        credentials: 'include',
-        body: JSON.stringify({ name: name.trim(), email: normalizedEmail, password }),
-      });
+      const response = await register({ name: name.trim(), email: normalizedEmail, password });
 
       if (response.status === 400) {
         setMessage((await response.text()) || 'Check your registration details and try again.');
@@ -356,28 +490,19 @@ async function handleStartPreparation(order) {
     setMessage('');
 
     try {
-      const csrfToken = await getCsrfToken();
+      const loginAccepted = await login({ email, password });
 
-      const response = await fetch('/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        credentials: 'include',
-        body: new URLSearchParams({
-          username: email,
-          password: password,
-          _csrf: csrfToken
-        })
-      });
-
-      if (response.ok) {
-        const contextResponse = await fetch('/api/prc/context', { credentials: 'include' });
-        if (!contextResponse.ok) throw new Error('Cannot load the authenticated user');
-        setCurrentUser(await contextResponse.json());
+      if (loginAccepted) {
+        const user = await getCurrentUser();
+        setOrders([]);
+        setCustomerOrders([]);
+        setCouriers([]);
+        setMapSelectedId(null);
+        setNotice(null);
+        setCurrentUser(user);
         setLogs([]);
         setLoggedIn(true);
-        setActiveTab('restaurants');
+        setActiveTab(defaultTabFor(user.role));
         addLog('Login successful: ' + email);
         setMessage('Login successful');
       } else {
@@ -392,20 +517,9 @@ async function handleStartPreparation(order) {
 
   async function handleLogout() {
     try {
-      const csrfToken = await getCsrfToken();
+      const loggedOut = await logout();
 
-      const response = await fetch('/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        credentials: 'include',
-        body: new URLSearchParams({
-          _csrf: csrfToken
-        })
-      });
-
-      if (response.ok) {
+      if (loggedOut) {
         addLog('Logout successful: ' + email);
         setLoggedIn(false);
         setCurrentUser(null);
@@ -416,13 +530,18 @@ async function handleStartPreparation(order) {
         setSelectedRestaurantId(null);
         setQuantities({});
         setOrders([]);
+        setCustomerOrders([]);
+        setQueueSummary({});
+        setCouriers([]);
+        setMapSelectedId(null);
+        setNotice(null);
         setActiveTab('restaurants');
         setMessage('Logged out successfully');
       } else {
-        setMessage('Logout failed');
+        showError('Logout failed', 'The server did not end the session. Please try again.');
       }
     } catch (error) {
-      setMessage('Logout request failed');
+      showError('Logout failed', 'Could not reach the server. Please try again.');
       console.error(error);
     }
   }
@@ -435,6 +554,26 @@ async function handleStartPreparation(order) {
     return restaurantCategories[restaurant.restaurantId] === selectedCategory;
   });
 
+  const selectedRestaurant = restaurants.find(
+    restaurant => restaurant.restaurantId === selectedRestaurantId
+  );
+
+  // R-DASH-01 / Spec Appendix A: each role only sees the commands it is permitted to use
+  const role = currentUser?.role;
+  const isCustomer = role === 'CUSTOMER';
+  const isRestaurant = role === 'RESTAURANT';
+  // Customers browse menus; operators see restaurant statuses (pause/reopen any restaurant)
+  const canSeeRestaurantList = isCustomer || role === 'OPERATOR';
+  // The Orders tab groups the menu and order screens (customer: Menu / My Orders; restaurant: Restaurant Orders / My Menu)
+  const inOrdersTab = ['menu', 'myorders', 'orders'].includes(activeTab);
+
+  // Info area "selected restaurant": the one clicked on the map (any role, counts only);
+  // otherwise staff = their own restaurant, customer = the menu they opened
+  const mapSelectedRestaurant = restaurants.find(restaurant => restaurant.restaurantId === mapSelectedId);
+  const infoRestaurant = mapSelectedRestaurant ?? (isRestaurant
+    ? restaurants.find(restaurant => restaurant.restaurantId === currentUser?.restaurantId)
+    : (isCustomer ? selectedRestaurant : undefined));
+
   if (loggedIn) {
     return (
       <div className="dashboard-container">
@@ -442,53 +581,123 @@ async function handleStartPreparation(order) {
           <h1>CARE Eats</h1>
           <h2>Dashboard</h2>
 
-          <p>Logged in as {email}</p>
+          <InfoArea
+            user={currentUser}
+            email={email}
+            restaurant={infoRestaurant}
+            stats={infoRestaurant ? queueSummary[infoRestaurant.restaurantId] : undefined}
+            canReset={role === 'OPERATOR'}
+            busy={pendingAction !== null}
+            onReset={handleReset}
+          />
 
+          {/* Spec DASH › Goal: "A horizontal tab bar for the modules (Map, Orders, Delivery, Pricing & History)".
+              Each role only sees the tabs it may use (R-DASH-01). */}
           <nav className="dashboard-tabs">
-            {['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
-  <button
-    type="button"
-    className={activeTab === 'delivery' ? 'active' : ''}
-    onClick={() => setActiveTab('delivery')}
-  >
-    {currentUser.role === 'COURIER' ? 'Delivery' : 'Dispatch'}
-  </button>
-)}
+            {/* Spec DASH: the map "is always visible and shows the current city state" — every role */}
             <button
               type="button"
               className={activeTab === 'restaurants' ? 'active' : ''}
               onClick={() => setActiveTab('restaurants')}
             >
-              Restaurants
+              Map
             </button>
 
-            <button
-              type="button"
-              className={activeTab === 'menu' ? 'active' : ''}
-              onClick={() => setActiveTab('menu')}
-            >
-              Menu
-            </button>
+            {(isCustomer || isRestaurant) && (
+              <button
+                type="button"
+                className={inOrdersTab ? 'active' : ''}
+                onClick={() => setActiveTab(isRestaurant ? 'orders' : 'myorders')}
+              >
+                Orders
+              </button>
+            )}
 
-            <button
-              type="button"
-              className={activeTab === 'orders' ? 'active' : ''}
-              onClick={() => setActiveTab('orders')}
-            >
-              Restaurant Orders
-            </button>
+            {['COURIER', 'OPERATOR'].includes(role) && (
+              <button
+                type="button"
+                className={activeTab === 'delivery' ? 'active' : ''}
+                onClick={() => setActiveTab('delivery')}
+              >
+                Delivery
+              </button>
+            )}
 
             <button
               type="button"
               className={activeTab === 'logs' ? 'active' : ''}
               onClick={() => setActiveTab('logs')}
             >
-              Activity Log
+              Pricing & History
             </button>
           </nav>
 
+          {/* Orders tab: one sub-bar per role */}
+          {inOrdersTab && isCustomer && (
+            <div className="category-tabs sub-tabs">
+              <button
+                type="button"
+                className={activeTab === 'menu' ? 'active' : ''}
+                onClick={openMenuTab}
+              >
+                {selectedRestaurant && activeTab !== 'menu'
+                  ? 'View previous menu: ' + selectedRestaurant.name
+                  : 'Menu'}
+              </button>
+
+              <button
+                type="button"
+                className={activeTab === 'myorders' ? 'active' : ''}
+                onClick={() => setActiveTab('myorders')}
+              >
+                My Orders
+              </button>
+            </div>
+          )}
+
+          {inOrdersTab && isRestaurant && (
+            <div className="category-tabs sub-tabs">
+              <button
+                type="button"
+                className={activeTab === 'orders' ? 'active' : ''}
+                onClick={() => setActiveTab('orders')}
+              >
+                Restaurant Orders
+              </button>
+
+              {/* Restaurant staff only see their own menu (Appendix A: not other restaurants' menus) */}
+              <button
+                type="button"
+                className={activeTab === 'menu' ? 'active' : ''}
+                onClick={openMyMenu}
+              >
+                My Menu
+              </button>
+            </div>
+          )}
+
           
+          {/* City map (R-DASH-02/03/06) — every role, quick actions by role (R-DASH-01) */}
           {activeTab === 'restaurants' && (
+            <section>
+              <h3>Map</h3>
+              <MapView
+                restaurants={restaurants}
+                couriers={couriers}
+                queueSummary={queueSummary}
+                selectedId={mapSelectedId}
+                onSelect={setMapSelectedId}
+                role={role}
+                ownRestaurantId={currentUser?.restaurantId}
+                ownOrders={orders}
+                busy={pendingAction !== null}
+                onViewMenu={loadMenu}
+                onRestaurantStatus={handleRestaurantStatus}
+              />
+            </section>
+          )}
+
+          {activeTab === 'restaurants' && canSeeRestaurantList && (
             <section>
               <h3>Explore Restaurants</h3>
 
@@ -516,12 +725,32 @@ async function handleStartPreparation(order) {
                       Status: {restaurant.status}
                     </p>
 
-                    <button
-                      type="button"
-                      onClick={() => loadMenu(restaurant.restaurantId)}
-                    >
-                      View Menu
-                    </button>
+                    {/* R-DASH-03: preparation-queue colour band */}
+                    <QueueBand
+                      queued={queueSummary[restaurant.restaurantId]?.queued ?? 0}
+                      restaurantStatus={restaurant.status}
+                    />
+
+                    {/* Only customers browse menus (operators only see the status) */}
+                    {isCustomer && (
+                      <button
+                        type="button"
+                        onClick={() => loadMenu(restaurant.restaurantId)}
+                      >
+                        View Menu
+                      </button>
+                    )}
+
+                    {/* UC-ORD-06 / R-DASH-01: the operator pauses or reopens any restaurant */}
+                    {role === 'OPERATOR' && restaurant.status !== 'CLOSED' && (
+                      <button
+                        type="button"
+                        disabled={pendingAction !== null}
+                        onClick={() => handleRestaurantStatus(restaurant)}
+                      >
+                        {restaurant.status === 'OPEN' ? 'Pause' : 'Reopen'}
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -529,119 +758,55 @@ async function handleStartPreparation(order) {
           )}
 
 
-          {activeTab === 'menu' && (
-            <section>
-              <h3>Menu</h3>
-
-              {selectedRestaurantId === null && (
-                <p>Select a restaurant from the Restaurants tab.</p>
-              )}
-
-              {menu.map(item => (
-                <div key={item.itemId}>
-                  <p>
-                    {item.name} - ${item.price} - {item.status}
-                  </p>
-
-                  {item.status === 'AVAILABLE' && (
-                    <>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={quantities[item.itemId] ?? 1}
-                        onChange={event =>
-                          setQuantities(previous => ({
-                            ...previous,
-                            [item.itemId]: event.target.value
-                          }))
-                        }
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => placeOrder(item.itemId)}
-                      >
-                        Place Order
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
-            </section>
+          {activeTab === 'menu' && (isCustomer || isRestaurant) && (
+            <MenuView
+              selectedRestaurant={selectedRestaurant}
+              selectedRestaurantId={selectedRestaurantId}
+              menu={menu}
+              canOrder={isCustomer}
+              canManage={isRestaurant}
+              busy={pendingAction !== null}
+              onToggleAvailability={handleToggleAvailability}
+              onRestaurantStatus={handleRestaurantStatus}
+              quantities={quantities}
+              onQuantityChange={(itemId, value) =>
+                setQuantities(previous => ({ ...previous, [itemId]: value }))}
+              onPlaceOrder={handlePlaceOrder}
+            />
           )}
 
-         {activeTab === 'orders' && (
-            <section aria-busy={ordersLoading || pendingAction !== null}>
-              <h3>Restaurant Orders</h3>
-              {pendingAction && <p role="status">{pendingAction} in progress...</p>}
+          {activeTab === 'myorders' && isCustomer && (
+            <CustomerOrderView
+              orders={customerOrders}
+              loading={customerOrdersLoading}
+              busy={pendingAction !== null}
+              onRefresh={loadCustomerOrders}
+              onCancel={handleCancelOrder}
+              onViewSummary={handleViewSummary}
+            />
+          )}
 
-              <button
-                type="button"
-                disabled={ordersLoading || pendingAction !== null}
-                onClick={loadRestaurantOrders}
-              >
-                {ordersLoading ? 'Loading orders...' : 'Refresh Orders'}
-              </button>
-
-              {orders.map(order => (
-                <div key={order.orderId}>
-                  <p>
-                    Order #{order.orderId} — {order.status}
-                  </p>
-
-{order.status === 'PLACED' && (
-  <>
-    <button
-      type="button"
-      disabled={ordersLoading || pendingAction !== null}
-      onClick={() =>
-        runOrderAction(
-          `/api/orders/${order.orderId}/accept`,
-          'Accept'
-        )
-      }
-    >
-      Accept
-    </button>
-
-    <button
-      type="button"
-      disabled={ordersLoading || pendingAction !== null}
-      onClick={() => handleReject(order.orderId)}
-    >
-      Reject
-    </button>
-  </>
-)}
-
-{order.status === 'ACCEPTED' && (
-  <button
-    type="button"
-    disabled={ordersLoading || pendingAction !== null}
-    onClick={() => handleStartPreparation(order)}
-  >
-    Start Preparation
-  </button>
-)}
-
-                  {order.status === 'PREPARING' && (
-                    <button
-                      type="button"
-                      disabled={ordersLoading || pendingAction !== null}
-                      onClick={() =>
-                        runOrderAction(
-                          `/api/orders/${order.orderId}/ready`,
-                          'Mark Ready'
-                        )
-                      }
-                    >
-                      Mark Ready
-                    </button>
-                  )}
-                </div>
-              ))}
-            </section>
+         {activeTab === 'orders' && currentUser?.role === 'RESTAURANT' && (
+            <RestaurantOrderView
+              orders={orders}
+              restaurantStatus={
+                restaurants.find(restaurant => restaurant.restaurantId === currentUser.restaurantId)?.status
+              }
+              ordersLoading={ordersLoading}
+              pendingAction={pendingAction}
+              rejectingOrderId={rejectingOrderId}
+              rejectionReason={rejectionReason}
+              onRejectionReasonChange={setRejectionReason}
+              onRefresh={loadRestaurantOrders}
+              onAccept={orderId =>
+                runOrderAction('Accept', csrfToken => acceptOrder(orderId, csrfToken))}
+              onStartReject={startReject}
+              onConfirmReject={handleReject}
+              onCancelReject={cancelReject}
+              onStartPreparation={handleStartPreparation}
+              onMarkReady={orderId =>
+                runOrderAction('Mark Ready', csrfToken => markOrderReady(orderId, csrfToken))}
+            />
           )}
 {activeTab === 'delivery'
   && ['COURIER', 'OPERATOR'].includes(currentUser?.role) && (
@@ -662,66 +827,48 @@ async function handleStartPreparation(order) {
           <button type="button" onClick={handleLogout}>
             Log Out
           </button>
+
+          {notice && (
+            <div className="notice-backdrop">
+              <div className="notice-box" role="alertdialog" aria-modal="true" aria-label={notice.title}>
+                <h4>{notice.title}</h4>
+                <p>{notice.message}</p>
+                {notice.onConfirm ? (
+                  <div className="notice-actions">
+                    <button type="button" onClick={closeNotice} autoFocus>
+                      Cancel
+                    </button>
+                    <button type="button" onClick={confirmNotice}>
+                      {notice.confirmLabel ?? 'Confirm'}
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={closeNotice} autoFocus>
+                    OK
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="login-container">
-      <form onSubmit={signingUp ? handleRegistration : handleLogin} className="login-form">
-        <h1>CARE Eats</h1>
-        <h2>{signingUp ? 'Create a customer account' : 'Login'}</h2>
-
-        {signingUp && (
-          <input
-            type="text"
-            aria-label="Name"
-            placeholder="Name"
-            autoComplete="name"
-            value={name}
-            onChange={event => setName(event.target.value)}
-            disabled={registrationPending}
-            required
-          />
-        )}
-
-        <input
-          type="email"
-          aria-label="Email"
-          placeholder="Email"
-          autoComplete="username"
-          value={email}
-          onChange={event => setEmail(event.target.value)}
-          disabled={registrationPending}
-          required
-        />
-
-        <input
-          type="password"
-          aria-label="Password"
-          placeholder="Password"
-          autoComplete={signingUp ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={event => setPassword(event.target.value)}
-          disabled={registrationPending}
-          required
-        />
-
-        <button type="submit" disabled={registrationPending}>
-          {registrationPending ? 'Creating account…' : signingUp ? 'Sign Up' : 'Log In'}
-        </button>
-        <button
-          type="button"
-          onClick={() => switchAuthMode(!signingUp)}
-          disabled={registrationPending}
-        >
-          {signingUp ? 'Back to Login' : 'Create a Customer Account'}
-        </button>
-
-        <p role="status">{message}</p>
-      </form>
-    </div>
+    <LoginView
+      signingUp={signingUp}
+      name={name}
+      email={email}
+      password={password}
+      registrationPending={registrationPending}
+      message={message}
+      onNameChange={setName}
+      onEmailChange={setEmail}
+      onPasswordChange={setPassword}
+      onSubmit={signingUp ? handleRegistration : handleLogin}
+      onToggleMode={() => switchAuthMode(!signingUp)}
+    />
   );
 }
 

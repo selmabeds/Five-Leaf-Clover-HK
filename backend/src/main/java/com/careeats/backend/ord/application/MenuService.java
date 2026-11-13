@@ -150,10 +150,23 @@ public class MenuService {
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public List<MenuItem> getMenu(Long restaurantId) {
 
-        getAuthenticatedUser();
+        User user = getAuthenticatedUser();
 
         Restaurant restaurant =
                 requireRestaurant(restaurantId);
+
+        // Spec Appendix A: restaurant staff may not see other restaurants' menus
+        if (user.getRole() == Role.RESTAURANT) {
+            Long assignedRestaurantId =
+                    restaurantAssignments.get(user.getId());
+
+            if (assignedRestaurantId == null
+                    || !assignedRestaurantId.equals(restaurantId)) {
+                throw new SecurityException(
+                        "User is not authorized for this restaurant"
+                );
+            }
+        }
 
         return restaurant.getMenuItems();
     }

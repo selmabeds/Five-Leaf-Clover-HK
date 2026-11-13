@@ -3,8 +3,11 @@ package com.careeats.backend.dash;
 import com.careeats.backend.ord.application.MenuService;
 import com.careeats.backend.ord.application.OrderService;
 import com.careeats.backend.ord.application.RestaurantService;
+import com.careeats.backend.ord.domain.MenuItem;
 import com.careeats.backend.ord.domain.Order;
 import com.careeats.backend.ord.domain.OrderLine;
+import com.careeats.backend.ord.domain.Restaurant;
+import com.careeats.backend.persistence.DemoResetService;
 
 import org.springframework.web.bind.annotation.*;
 
@@ -18,20 +21,29 @@ public class DashController {
     private final RestaurantService restaurantService;
     private final MenuService menuService;
     private final OrderService orderService;
+    private final DemoResetService demoResetService;
 
     public DashController(
             RestaurantService restaurantService,
             MenuService menuService,
-            OrderService orderService) {
+            OrderService orderService,
+            DemoResetService demoResetService) {
 
         this.restaurantService = restaurantService;
         this.menuService = menuService;
         this.orderService = orderService;
+        this.demoResetService = demoResetService;
     }
 
     @GetMapping("/restaurants")
     public Object getRestaurants() {
         return restaurantService.getAllRestaurants();
+    }
+
+    // Read model for R-DASH-03 queue colours and the info area's quick stats (counts only)
+    @GetMapping("/restaurants/queue-summary")
+    public List<OrderService.QueueSummary> getQueueSummary() {
+        return orderService.getQueueSummary();
     }
 
     @GetMapping("/restaurants/{id}/menu")
@@ -84,6 +96,41 @@ public class DashController {
     @PostMapping("/orders/{id}/ready")
     public Order markReady(@PathVariable Long id) {
         return orderService.markOrderReady(id);
+    }
+
+    // UC-ORD-03 Cancel Order: customer while PLACED, operator afterwards (rules in OrderService + State pattern)
+    @PostMapping("/orders/{id}/cancel")
+    public Order cancelOrder(@PathVariable Long id) {
+        return orderService.cancelOrder(id);
+    }
+
+    // UC-ORD-05 Manage Restaurant Menu: item availability (own restaurant or operator, checked in MenuService)
+    @PostMapping("/restaurants/{id}/menu/{itemId}/sold-out")
+    public MenuItem markItemSoldOut(@PathVariable Long id, @PathVariable Long itemId) {
+        return menuService.markItemSoldOut(id, itemId);
+    }
+
+    @PostMapping("/restaurants/{id}/menu/{itemId}/available")
+    public MenuItem markItemAvailable(@PathVariable Long id, @PathVariable Long itemId) {
+        return menuService.markItemAvailable(id, itemId);
+    }
+
+    // UC-ORD-06 Manage Restaurant Status (own restaurant or operator, checked in RestaurantService)
+    @PostMapping("/restaurants/{id}/pause")
+    public Restaurant pauseRestaurant(@PathVariable Long id) {
+        return restaurantService.pauseRestaurant(id);
+    }
+
+    @PostMapping("/restaurants/{id}/reopen")
+    public Restaurant reopenRestaurant(@PathVariable Long id) {
+        return restaurantService.reopenRestaurant(id);
+    }
+
+    // Reset: restore the initial state (operator only, local demo database only — see DemoResetService)
+    @PostMapping("/reset")
+    public Map<String, String> reset() {
+        demoResetService.resetToInitialState();
+        return Map.of("status", "Initial state restored");
     }
 
     @ExceptionHandler({
