@@ -47,6 +47,11 @@ const categories = [
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [pendingAction, setPendingAction] = useState(null);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  // In-page pop-up (browser pop-ups like window.alert can be blocked)
+  const [notice, setNotice] = useState(null);
+  // Order currently being rejected, and the reason typed for it
+  const [rejectingOrderId, setRejectingOrderId] = useState(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const actionInFlight = useRef(false);
   const orderLoadInFlight = useRef(null);
 
@@ -180,8 +185,9 @@ const categories = [
       try {
         const response = await fetch(`/api/restaurants/${restaurantId}/orders`, { credentials: 'include' });
         if (!response.ok) throw new Error(await response.text());
-        setOrders(await response.json());
-        addLog('Restaurant orders loaded');
+        const data = await response.json();
+        setOrders(data);
+        addLog('Restaurant orders loaded for restaurant ' + restaurantId + ' (' + data.length + ' orders)');
       } catch (error) {
         addLog('Error loading orders: ' + error.message);
         setMessage(error.message);
@@ -254,25 +260,46 @@ async function runOrderAction(url, action, rejectionReason = null) {
   }
 }
 
+function startReject(orderId) {
+  setRejectingOrderId(orderId);
+  setRejectionReason('');
+}
+
+function cancelReject() {
+  setRejectingOrderId(null);
+  setRejectionReason('');
+}
+
 async function handleReject(orderId) {
-  const reason = window.prompt(
-    'Please enter a reason for rejecting this order:'
-  );
+  const reason = rejectionReason.trim();
 
-  if (reason === null) {
-    return;
-  }
-
-  if (!reason.trim()) {
+  if (!reason) {
+    addLog('Reject failed: a rejection reason is required');
     setMessage('A rejection reason is required.');
     return;
   }
 
+  cancelReject();
+
   await runOrderAction(
     `/api/orders/${orderId}/reject`,
     'Reject',
-    reason.trim()
+    reason
   );
+}
+
+function openMenuTab() {
+  if (selectedRestaurantId === null) {
+    addLog('Menu: no restaurant selected');
+    setNotice('Please select a restaurant first to view its menu.');
+    return;
+  }
+  setActiveTab('menu');
+}
+
+function closeNotice() {
+  setNotice(null);
+  setActiveTab('restaurants');
 }
 
 async function handleStartPreparation(order) {
@@ -443,6 +470,10 @@ async function handleStartPreparation(order) {
     return restaurantCategories[restaurant.restaurantId] === selectedCategory;
   });
 
+  const selectedRestaurant = restaurants.find(
+    restaurant => restaurant.restaurantId === selectedRestaurantId
+  );
+
   if (loggedIn) {
     return (
       <div className="dashboard-container">
@@ -473,9 +504,11 @@ async function handleStartPreparation(order) {
             <button
               type="button"
               className={activeTab === 'menu' ? 'active' : ''}
-              onClick={() => setActiveTab('menu')}
+              onClick={openMenuTab}
             >
-              Menu
+              {selectedRestaurant && activeTab !== 'menu'
+                ? 'View previous menu: ' + selectedRestaurant.name
+                : 'Menu'}
             </button>
 
             {currentUser?.role === 'RESTAURANT' && (
@@ -541,7 +574,7 @@ async function handleStartPreparation(order) {
 
           {activeTab === 'menu' && (
             <section>
-              <h3>Menu</h3>
+              <h3>{selectedRestaurant ? 'Menu: ' + selectedRestaurant.name : 'Menu'}</h3>
 
               {selectedRestaurantId === null && (
                 <p>Select a restaurant from the Restaurants tab.</p>
@@ -594,63 +627,103 @@ async function handleStartPreparation(order) {
                 {ordersLoading ? 'Loading orders...' : 'Refresh Orders'}
               </button>
 
-              {orders.map(order => (
-                <div key={order.orderId}>
-                  <p>
-                    Order #{order.orderId} — {order.status}
-                  </p>
+              {!ordersLoading && orders.length === 0 && (
+                <p className="orders-empty">No orders for this restaurant yet.</p>
+              )}
 
-{order.status === 'PLACED' && (
-  <>
-    <button
-      type="button"
-      disabled={ordersLoading || pendingAction !== null}
-      onClick={() =>
-        runOrderAction(
-          `/api/orders/${order.orderId}/accept`,
-          'Accept'
-        )
-      }
-    >
-      Accept
-    </button>
+              <div className="order-list">
+                {orders.map(order => (
+                  <div className="order-card" key={order.orderId}>
+                    <div className="order-card-header">
+                      <span className="order-number">Order #{order.orderId}</span>
+                      <span className="order-status">{order.status}</span>
+                    </div>
 
-    <button
-      type="button"
-      disabled={ordersLoading || pendingAction !== null}
-      onClick={() => handleReject(order.orderId)}
-    >
-      Reject
-    </button>
-  </>
-)}
+                    <div className="order-actions">
+                      {order.status === 'PLACED' && rejectingOrderId !== order.orderId && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={ordersLoading || pendingAction !== null}
+                            onClick={() =>
+                              runOrderAction(
+                                `/api/orders/${order.orderId}/accept`,
+                                'Accept'
+                              )
+                            }
+                          >
+                            Accept
+                          </button>
 
-{order.status === 'ACCEPTED' && (
-  <button
-    type="button"
-    disabled={ordersLoading || pendingAction !== null}
-    onClick={() => handleStartPreparation(order)}
-  >
-    Start Preparation
-  </button>
-)}
+                          <button
+                            type="button"
+                            disabled={ordersLoading || pendingAction !== null}
+                            onClick={() => startReject(order.orderId)}
+                          >
+                            Reject
+                          </button>
+                        </>
+                      )}
 
-                  {order.status === 'PREPARING' && (
-                    <button
-                      type="button"
-                      disabled={ordersLoading || pendingAction !== null}
-                      onClick={() =>
-                        runOrderAction(
-                          `/api/orders/${order.orderId}/ready`,
-                          'Mark Ready'
-                        )
-                      }
-                    >
-                      Mark Ready
-                    </button>
-                  )}
-                </div>
-              ))}
+                      {order.status === 'PLACED' && rejectingOrderId === order.orderId && (
+                        <div className="reject-form">
+                          <input
+                            type="text"
+                            aria-label={'Reason for rejecting order ' + order.orderId}
+                            placeholder="Reason for rejecting this order"
+                            value={rejectionReason}
+                            onChange={event => setRejectionReason(event.target.value)}
+                            autoFocus
+                          />
+                          <button
+                            type="button"
+                            disabled={ordersLoading || pendingAction !== null || !rejectionReason.trim()}
+                            onClick={() => handleReject(order.orderId)}
+                          >
+                            Confirm Reject
+                          </button>
+                          <button
+                            type="button"
+                            disabled={ordersLoading || pendingAction !== null}
+                            onClick={cancelReject}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      )}
+
+                      {order.status === 'ACCEPTED' && (
+                        <button
+                          type="button"
+                          disabled={ordersLoading || pendingAction !== null}
+                          onClick={() => handleStartPreparation(order)}
+                        >
+                          Start Preparation
+                        </button>
+                      )}
+
+                      {order.status === 'PREPARING' && (
+                        <button
+                          type="button"
+                          disabled={ordersLoading || pendingAction !== null}
+                          onClick={() =>
+                            runOrderAction(
+                              `/api/orders/${order.orderId}/ready`,
+                              'Mark Ready'
+                            )
+                          }
+                        >
+                          Mark Ready
+                        </button>
+                      )}
+
+                      {order.status === 'READY' && (
+                        <p className="order-note">Waiting for courier pickup</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </section>
           )}
 {activeTab === 'delivery'
@@ -672,6 +745,17 @@ async function handleStartPreparation(order) {
           <button type="button" onClick={handleLogout}>
             Log Out
           </button>
+
+          {notice && (
+            <div className="notice-backdrop">
+              <div className="notice-box" role="alertdialog" aria-modal="true" aria-label="Notice">
+                <p>{notice}</p>
+                <button type="button" onClick={closeNotice} autoFocus>
+                  OK
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );

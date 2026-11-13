@@ -195,6 +195,116 @@ body {
   margin-top: 8px;
 }
 
+/* Restaurant orders list */
+
+.order-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  text-align: left;
+}
+
+.order-card {
+  padding: 16px 20px;
+  background-color: #f0ece7;
+  border: 1px solid #ded7cf;
+  border-radius: 14px;
+}
+
+.order-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-number {
+  font-weight: 600;
+  color: #54453e;
+}
+
+.order-status {
+  padding: 4px 10px;
+  background-color: #e3dbd2;
+  color: #54453e;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+}
+
+.order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.order-actions:empty {
+  display: none;
+}
+
+.orders-empty {
+  margin-top: 16px;
+  color: #97877d;
+}
+
+.order-note {
+  margin: 0;
+  color: #97877d;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.reject-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+
+.reject-form input {
+  flex: 1 1 220px;
+  padding: 10px 12px;
+  border: 1px solid #ded7cf;
+  border-radius: 10px;
+  font-family: inherit;
+}
+
+.dashboard-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* In-page pop-up (works even when the browser blocks pop-ups) */
+
+.notice-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(72, 60, 51, 0.35);
+  z-index: 1000;
+}
+
+.notice-box {
+  width: 100%;
+  max-width: 380px;
+  padding: 24px;
+  background-color: #f8f6f2;
+  border: 1px solid #ded7cf;
+  border-radius: 16px;
+  box-shadow: 0 12px 35px rgba(72, 60, 51, 0.2);
+  text-align: center;
+}
+
+.notice-box p {
+  margin: 0 0 16px;
+  color: #54453e;
+}
+
 /* Main dashboard navigation tabs */
 
 .dashboard-tabs {
