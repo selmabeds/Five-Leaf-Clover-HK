@@ -103,6 +103,11 @@ export function markItemAvailable(restaurantId, itemId, csrfToken) {
   return postJson(`/api/restaurants/${restaurantId}/menu/${itemId}/available`, csrfToken);
 }
 
+// Reset: restore the initial state (operator only; refused on the shared database)
+export function resetSystem(csrfToken) {
+  return postJson('/api/reset', csrfToken);
+}
+
 // UC-ORD-06 Manage Restaurant Status
 export function pauseRestaurant(restaurantId, csrfToken) {
   return postJson(`/api/restaurants/${restaurantId}/pause`, csrfToken);

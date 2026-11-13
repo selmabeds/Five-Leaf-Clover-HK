@@ -27,7 +27,8 @@ import {
   markItemAvailable,
   pauseRestaurant,
   reopenRestaurant,
-  getQueueSummary
+  getQueueSummary,
+  resetSystem
 } from './dash/services/orderService';
 import CustomerOrderView from './dash/components/CustomerOrderView';
 import QueueBand from './dash/components/QueueBand';
@@ -377,6 +378,36 @@ function closeNotice() {
   if (returnTab) setActiveTab(returnTab);
 }
 
+// Confirmation pop-up: runs the confirmed command after closing
+function confirmNotice() {
+  const onConfirm = notice?.onConfirm;
+  setNotice(null);
+  if (onConfirm) onConfirm();
+}
+
+// Reset (operator): ask for confirmation first, then restore the initial state
+function handleReset() {
+  setNotice({
+    title: 'Reset the system?',
+    message: 'This removes all orders and deliveries and restores restaurants, menus and couriers to their initial state. Accounts are kept.',
+    confirmLabel: 'Reset',
+    onConfirm: () => runCommand(
+      'Reset',
+      csrfToken => resetSystem(csrfToken),
+      async () => {
+        setMenu([]);
+        setSelectedRestaurantId(null);
+        setQuantities({});
+        setOrders([]);
+        setCustomerOrders([]);
+        await loadRestaurants();
+        await loadQueueSummary();
+        addLog('System restored to its initial state');
+      }
+    )
+  });
+}
+
 // Only shown on the order whose turn it is (RestaurantOrderView decides), so no pop-up is needed
 async function handleStartPreparation(order) {
   await runOrderAction('Start Preparation', csrfToken => startPreparation(order.restaurantId, csrfToken));
@@ -515,6 +546,9 @@ async function handleStartPreparation(order) {
             email={email}
             restaurant={infoRestaurant}
             stats={infoRestaurant ? queueSummary[infoRestaurant.restaurantId] : undefined}
+            canReset={role === 'OPERATOR'}
+            busy={pendingAction !== null}
+            onReset={handleReset}
           />
 
           {/* Spec DASH › Goal: "A horizontal tab bar for the modules (Map, Orders, Delivery, Pricing & History)".
@@ -739,9 +773,20 @@ async function handleStartPreparation(order) {
               <div className="notice-box" role="alertdialog" aria-modal="true" aria-label={notice.title}>
                 <h4>{notice.title}</h4>
                 <p>{notice.message}</p>
-                <button type="button" onClick={closeNotice} autoFocus>
-                  OK
-                </button>
+                {notice.onConfirm ? (
+                  <div className="notice-actions">
+                    <button type="button" onClick={closeNotice} autoFocus>
+                      Cancel
+                    </button>
+                    <button type="button" onClick={confirmNotice}>
+                      {notice.confirmLabel ?? 'Confirm'}
+                    </button>
+                  </div>
+                ) : (
+                  <button type="button" onClick={closeNotice} autoFocus>
+                    OK
+                  </button>
+                )}
               </div>
             </div>
           )}

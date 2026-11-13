@@ -7,6 +7,7 @@ import com.careeats.backend.ord.domain.MenuItem;
 import com.careeats.backend.ord.domain.Order;
 import com.careeats.backend.ord.domain.OrderLine;
 import com.careeats.backend.ord.domain.Restaurant;
+import com.careeats.backend.persistence.DemoResetService;
 
 import org.springframework.web.bind.annotation.*;
 
@@ -20,15 +21,18 @@ public class DashController {
     private final RestaurantService restaurantService;
     private final MenuService menuService;
     private final OrderService orderService;
+    private final DemoResetService demoResetService;
 
     public DashController(
             RestaurantService restaurantService,
             MenuService menuService,
-            OrderService orderService) {
+            OrderService orderService,
+            DemoResetService demoResetService) {
 
         this.restaurantService = restaurantService;
         this.menuService = menuService;
         this.orderService = orderService;
+        this.demoResetService = demoResetService;
     }
 
     @GetMapping("/restaurants")
@@ -120,6 +124,13 @@ public class DashController {
     @PostMapping("/restaurants/{id}/reopen")
     public Restaurant reopenRestaurant(@PathVariable Long id) {
         return restaurantService.reopenRestaurant(id);
+    }
+
+    // Reset: restore the initial state (operator only, local demo database only — see DemoResetService)
+    @PostMapping("/reset")
+    public Map<String, String> reset() {
+        demoResetService.resetToInitialState();
+        return Map.of("status", "Initial state restored");
     }
 
     @ExceptionHandler({

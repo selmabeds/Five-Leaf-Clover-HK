@@ -6,15 +6,22 @@ import QueueBand from './QueueBand';
  *
  * "An information area showing: the currently logged-in user and their role;
  *  the selected restaurant name and quick stats (orders queued, in preparation, ready)".
- * Counts only, never order details (Spec Appendix A). Reset and the map label
- * toggle belong here too and are added with those items.
+ * Counts only, never order details (Spec Appendix A).
+ * "a Reset action to restore the initial scenario": operator only (R-DASH-01 "restore the initial state").
+ * The optional map label toggle belongs here too and comes with the map.
  */
-export default function InfoArea({ user, email, restaurant, stats }) {
+export default function InfoArea({ user, email, restaurant, stats, canReset, busy, onReset }) {
   return (
     <div className="info-area">
       <p className="info-user">
         Logged in as <strong>{user?.name ?? email}</strong> ({email}) · Role: <strong>{user?.role?.toLowerCase()}</strong>
       </p>
+
+      {canReset && (
+        <button type="button" className="info-reset" disabled={busy} onClick={onReset}>
+          Reset
+        </button>
+      )}
 
       {restaurant && (
         <div className="info-restaurant">
