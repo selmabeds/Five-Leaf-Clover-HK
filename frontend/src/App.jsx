@@ -168,10 +168,17 @@ const categories = [
 
   async function loadRestaurantOrders() {
     if (orderLoadInFlight.current) return orderLoadInFlight.current;
+    const restaurantId = currentUser?.restaurantId;
+    if (restaurantId == null) {
+      setOrders([]);
+      addLog('Error loading orders: no restaurant is assigned to this account');
+      setMessage('No restaurant is assigned to this account.');
+      return;
+    }
     setOrdersLoading(true);
     const request = (async () => {
       try {
-        const response = await fetch('/api/restaurants/1/orders', { credentials: 'include' });
+        const response = await fetch(`/api/restaurants/${restaurantId}/orders`, { credentials: 'include' });
         if (!response.ok) throw new Error(await response.text());
         setOrders(await response.json());
         addLog('Restaurant orders loaded');
@@ -374,6 +381,7 @@ async function handleStartPreparation(order) {
       if (response.ok) {
         const contextResponse = await fetch('/api/prc/context', { credentials: 'include' });
         if (!contextResponse.ok) throw new Error('Cannot load the authenticated user');
+        setOrders([]);
         setCurrentUser(await contextResponse.json());
         setLogs([]);
         setLoggedIn(true);
