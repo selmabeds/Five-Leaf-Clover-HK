@@ -580,37 +580,54 @@ async function handleStartPreparation(order) {
                 <p>Select a restaurant from the Restaurants tab.</p>
               )}
 
-              {menu.map(item => (
-                <div key={item.itemId}>
-                  <p>
-                    {item.name} - ${item.price} - {item.status}
-                  </p>
+              {/* R-DASH-04: no ordering from a paused or closed restaurant */}
+              {selectedRestaurant && selectedRestaurant.status !== 'OPEN' && (
+                <p className="menu-notice">
+                  This restaurant is {selectedRestaurant.status.toLowerCase()}. Ordering is unavailable.
+                </p>
+              )}
 
-                  {item.status === 'AVAILABLE' && (
-                    <>
-                      <input
-                        type="number"
-                        min="1"
-                        step="1"
-                        value={quantities[item.itemId] ?? 1}
-                        onChange={event =>
-                          setQuantities(previous => ({
-                            ...previous,
-                            [item.itemId]: event.target.value
-                          }))
-                        }
-                      />
+              {menu.map(item => {
+                const restaurantClosed = selectedRestaurant?.status !== 'OPEN';
+                const soldOut = item.status !== 'AVAILABLE';
+                const orderingDisabled = restaurantClosed || soldOut;
 
-                      <button
-                        type="button"
-                        onClick={() => placeOrder(item.itemId)}
-                      >
-                        Place Order
-                      </button>
-                    </>
-                  )}
-                </div>
-              ))}
+                return (
+                  <div key={item.itemId}>
+                    <p>
+                      {item.name} - ${item.price} - {item.status}
+                    </p>
+
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      aria-label={'Quantity of ' + item.name}
+                      value={quantities[item.itemId] ?? 1}
+                      disabled={orderingDisabled}
+                      onChange={event =>
+                        setQuantities(previous => ({
+                          ...previous,
+                          [item.itemId]: event.target.value
+                        }))
+                      }
+                    />
+
+                    {/* R-DASH-04: Place Order is disabled, not hidden */}
+                    <button
+                      type="button"
+                      disabled={orderingDisabled}
+                      onClick={() => placeOrder(item.itemId)}
+                    >
+                      Place Order
+                    </button>
+
+                    {soldOut && !restaurantClosed && (
+                      <span className="menu-item-note">Sold out</span>
+                    )}
+                  </div>
+                );
+              })}
             </section>
           )}
 

@@ -249,6 +249,21 @@ body {
   color: #97877d;
 }
 
+.menu-notice {
+  padding: 10px 14px;
+  background-color: #f0ece7;
+  border: 1px solid #ded7cf;
+  border-radius: 10px;
+  color: #54453e;
+}
+
+.menu-item-note {
+  margin-left: 8px;
+  color: #97877d;
+  font-size: 13px;
+  font-style: italic;
+}
+
 .order-note {
   margin: 0;
   color: #97877d;
