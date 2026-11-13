@@ -2,8 +2,20 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 import PrcConsole from './prc/PrcConsole';
 import DeliveryConsole from './dlv/DeliveryConsole';
+import LoginView from './dash/components/LoginView';
+import MenuView from './dash/components/MenuView';
 import RestaurantOrderView from './dash/components/RestaurantOrderView';
 import {
+  getCsrfToken,
+  login,
+  getCurrentUser,
+  logout,
+  register
+} from './dash/services/authService';
+import {
+  getRestaurants,
+  getMenu,
+  placeOrder,
   getRestaurantOrders,
   acceptOrder,
   rejectOrder,
@@ -79,37 +91,9 @@ const categories = [
     setLogs(previous => [...previous, message]);
   }
 
-  async function getCsrfToken() {
-    const response = await fetch('/login', {
-      credentials: 'include'
-    });
-
-    if (!response.ok) {
-      throw new Error('Cannot load login page');
-    }
-
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    const token = doc.querySelector('input[name="_csrf"]')?.value;
-
-    if (!token) {
-      throw new Error('CSRF token not found');
-    }
-
-    return token;
-  }
-
   async function loadRestaurants() {
     try {
-      const response = await fetch('/api/restaurants', {
-        credentials: 'include'
-      });
-
-      if (!response.ok) {
-        throw new Error('Could not load restaurants');
-      }
-
-      const data = await response.json();
+      const data = await getRestaurants();
       setRestaurants(data);
       addLog('Restaurants loaded');
     } catch (error) {
@@ -120,16 +104,7 @@ const categories = [
 
   async function loadMenu(restaurantId) {
     try {
-      const response = await fetch(
-        `/api/restaurants/${restaurantId}/menu`,
-        { credentials: 'include' }
-      );
-
-      if (!response.ok) {
-        throw new Error('Could not load menu');
-      }
-
-      const data = await response.json();
+      const data = await getMenu(restaurantId);
 
       setMenu(data);
       setSelectedRestaurantId(restaurantId);
@@ -142,34 +117,19 @@ const categories = [
     }
   }
 
-  async function placeOrder(menuItemId) {
+  async function handlePlaceOrder(menuItemId) {
     try {
       const csrfToken = await getCsrfToken();
 
-      const response = await fetch('/api/orders', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken
-        },
-        body: JSON.stringify({
-          restaurantId: selectedRestaurantId,
-          orderLines: [
-            {
-              menuItemId: menuItemId,
-              quantity: Number(quantities[menuItemId] ?? 1)
-            }
-          ]
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText);
-      }
-
-      const order = await response.json();
+      const order = await placeOrder({
+        restaurantId: selectedRestaurantId,
+        orderLines: [
+          {
+            menuItemId: menuItemId,
+            quantity: Number(quantities[menuItemId] ?? 1)
+          }
+        ]
+      }, csrfToken);
 
       addLog('Order placed successfully: #' + order.orderId);
       setMessage('Order placed successfully: #' + order.orderId);
@@ -306,16 +266,7 @@ async function handleStartPreparation(order) {
     const normalizedEmail = email.trim().toLowerCase();
 
     try {
-      const csrfToken = await getCsrfToken();
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrfToken,
-        },
-        credentials: 'include',
-        body: JSON.stringify({ name: name.trim(), email: normalizedEmail, password }),
-      });
+      const response = await register({ name: name.trim(), email: normalizedEmail, password });
 
       if (response.status === 400) {
         setMessage((await response.text()) || 'Check your registration details and try again.');
@@ -342,26 +293,12 @@ async function handleStartPreparation(order) {
     setMessage('');
 
     try {
-      const csrfToken = await getCsrfToken();
+      const loginAccepted = await login({ email, password });
 
-      const response = await fetch('/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        credentials: 'include',
-        body: new URLSearchParams({
-          username: email,
-          password: password,
-          _csrf: csrfToken
-        })
-      });
-
-      if (response.ok) {
-        const contextResponse = await fetch('/api/prc/context', { credentials: 'include' });
-        if (!contextResponse.ok) throw new Error('Cannot load the authenticated user');
+      if (loginAccepted) {
+        const user = await getCurrentUser();
         setOrders([]);
-        setCurrentUser(await contextResponse.json());
+        setCurrentUser(user);
         setLogs([]);
         setLoggedIn(true);
         setActiveTab('restaurants');
@@ -379,20 +316,9 @@ async function handleStartPreparation(order) {
 
   async function handleLogout() {
     try {
-      const csrfToken = await getCsrfToken();
+      const loggedOut = await logout();
 
-      const response = await fetch('/logout', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded'
-        },
-        credentials: 'include',
-        body: new URLSearchParams({
-          _csrf: csrfToken
-        })
-      });
-
-      if (response.ok) {
+      if (loggedOut) {
         addLog('Logout successful: ' + email);
         setLoggedIn(false);
         setCurrentUser(null);
@@ -525,62 +451,15 @@ async function handleStartPreparation(order) {
 
 
           {activeTab === 'menu' && (
-            <section>
-              <h3>{selectedRestaurant ? 'Menu: ' + selectedRestaurant.name : 'Menu'}</h3>
-
-              {selectedRestaurantId === null && (
-                <p>Select a restaurant from the Restaurants tab.</p>
-              )}
-
-              {/* R-DASH-04: no ordering from a paused or closed restaurant */}
-              {selectedRestaurant && selectedRestaurant.status !== 'OPEN' && (
-                <p className="menu-notice">
-                  This restaurant is {selectedRestaurant.status.toLowerCase()}. Ordering is unavailable.
-                </p>
-              )}
-
-              {menu.map(item => {
-                const restaurantClosed = selectedRestaurant?.status !== 'OPEN';
-                const soldOut = item.status !== 'AVAILABLE';
-                const orderingDisabled = restaurantClosed || soldOut;
-
-                return (
-                  <div key={item.itemId}>
-                    <p>
-                      {item.name} - ${item.price} - {item.status}
-                    </p>
-
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      aria-label={'Quantity of ' + item.name}
-                      value={quantities[item.itemId] ?? 1}
-                      disabled={orderingDisabled}
-                      onChange={event =>
-                        setQuantities(previous => ({
-                          ...previous,
-                          [item.itemId]: event.target.value
-                        }))
-                      }
-                    />
-
-                    {/* R-DASH-04: Place Order is disabled, not hidden */}
-                    <button
-                      type="button"
-                      disabled={orderingDisabled}
-                      onClick={() => placeOrder(item.itemId)}
-                    >
-                      Place Order
-                    </button>
-
-                    {soldOut && !restaurantClosed && (
-                      <span className="menu-item-note">Sold out</span>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
+            <MenuView
+              selectedRestaurant={selectedRestaurant}
+              selectedRestaurantId={selectedRestaurantId}
+              menu={menu}
+              quantities={quantities}
+              onQuantityChange={(itemId, value) =>
+                setQuantities(previous => ({ ...previous, [itemId]: value }))}
+              onPlaceOrder={handlePlaceOrder}
+            />
           )}
 
          {activeTab === 'orders' && currentUser?.role === 'RESTAURANT' && (
@@ -638,60 +517,19 @@ async function handleStartPreparation(order) {
   }
 
   return (
-    <div className="login-container">
-      <form onSubmit={signingUp ? handleRegistration : handleLogin} className="login-form">
-        <h1>CARE Eats</h1>
-        <h2>{signingUp ? 'Create a customer account' : 'Login'}</h2>
-
-        {signingUp && (
-          <input
-            type="text"
-            aria-label="Name"
-            placeholder="Name"
-            autoComplete="name"
-            value={name}
-            onChange={event => setName(event.target.value)}
-            disabled={registrationPending}
-            required
-          />
-        )}
-
-        <input
-          type="email"
-          aria-label="Email"
-          placeholder="Email"
-          autoComplete="username"
-          value={email}
-          onChange={event => setEmail(event.target.value)}
-          disabled={registrationPending}
-          required
-        />
-
-        <input
-          type="password"
-          aria-label="Password"
-          placeholder="Password"
-          autoComplete={signingUp ? 'new-password' : 'current-password'}
-          value={password}
-          onChange={event => setPassword(event.target.value)}
-          disabled={registrationPending}
-          required
-        />
-
-        <button type="submit" disabled={registrationPending}>
-          {registrationPending ? 'Creating account…' : signingUp ? 'Sign Up' : 'Log In'}
-        </button>
-        <button
-          type="button"
-          onClick={() => switchAuthMode(!signingUp)}
-          disabled={registrationPending}
-        >
-          {signingUp ? 'Back to Login' : 'Create a Customer Account'}
-        </button>
-
-        <p role="status">{message}</p>
-      </form>
-    </div>
+    <LoginView
+      signingUp={signingUp}
+      name={name}
+      email={email}
+      password={password}
+      registrationPending={registrationPending}
+      message={message}
+      onNameChange={setName}
+      onEmailChange={setEmail}
+      onPasswordChange={setPassword}
+      onSubmit={signingUp ? handleRegistration : handleLogin}
+      onToggleMode={() => switchAuthMode(!signingUp)}
+    />
   );
 }
 

@@ -6,10 +6,10 @@
  * ORD owns restaurant and order business rules.
  */
 
-// GET request to ORD; throws the server's message if the request fails
-async function getJson(url) {
+// GET request to ORD; throws `errorMessage` (or the server's message) if the request fails
+async function getJson(url, errorMessage) {
   const response = await fetch(url, { credentials: 'include' });
-  if (!response.ok) throw new Error(await response.text());
+  if (!response.ok) throw new Error(errorMessage ?? await response.text());
   return response.json();
 }
 
@@ -28,14 +28,20 @@ async function postJson(url, csrfToken, body) {
   return response.json();
 }
 
-export async function getMenu(restaurantId) {
-  // TODO: Request the restaurant menu from ORD.
-  throw new Error("Menu integration not implemented yet.");
+// All restaurants with their status and position (R-ORD-01)
+export function getRestaurants() {
+  return getJson('/api/restaurants', 'Could not load restaurants');
 }
 
-export async function placeOrder(orderData) {
-  // TODO: Send a new order request to ORD.
-  throw new Error("Order placement not implemented yet.");
+// UC-ORD-01 Browse Restaurant Menu
+export function getMenu(restaurantId) {
+  return getJson(`/api/restaurants/${restaurantId}/menu`, 'Could not load menu');
+}
+
+// UC-ORD-02 Order Food: orderData = { restaurantId, orderLines: [{ menuItemId, quantity }] }
+// ORD checks R-ORD-02 (open restaurant, available items) before creating the order
+export function placeOrder(orderData, csrfToken) {
+  return postJson('/api/orders', csrfToken, orderData);
 }
 
 // Orders of the logged-in staff member's restaurant (Spec Appendix A; UC-ORD-08 checks it)
