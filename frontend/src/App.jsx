@@ -478,13 +478,15 @@ async function handleStartPreparation(order) {
               Menu
             </button>
 
-            <button
-              type="button"
-              className={activeTab === 'orders' ? 'active' : ''}
-              onClick={() => setActiveTab('orders')}
-            >
-              Restaurant Orders
-            </button>
+            {currentUser?.role === 'RESTAURANT' && (
+              <button
+                type="button"
+                className={activeTab === 'orders' ? 'active' : ''}
+                onClick={() => setActiveTab('orders')}
+              >
+                Restaurant Orders
+              </button>
+            )}
 
             <button
               type="button"
@@ -579,7 +581,7 @@ async function handleStartPreparation(order) {
             </section>
           )}
 
-         {activeTab === 'orders' && (
+         {activeTab === 'orders' && currentUser?.role === 'RESTAURANT' && (
             <section aria-busy={ordersLoading || pendingAction !== null}>
               <h3>Restaurant Orders</h3>
               {pendingAction && <p role="status">{pendingAction} in progress...</p>}
