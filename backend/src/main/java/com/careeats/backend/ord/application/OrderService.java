@@ -346,70 +346,83 @@ public OrderService(
     return order;
 }
 
-    // CANCEL ORDER - CUSTOMER OR OPERATOR
-    public synchronized Order cancelOrder(Long orderId) {
-        orderRepository.lockForWrite();
+   
+   
+// CANCEL ORDER - CUSTOMER OR OPERATOR
+public synchronized Order cancelOrder(Long orderId) {
+    orderRepository.lockForWrite();
 
-        User user = getAuthenticatedUser();
-        Order order = requireOrder(orderId);
+    User user = getAuthenticatedUser();
+    Order order = requireOrder(orderId);
 
-        if (user.getRole() == Role.CUSTOMER) {
+    if (user.getRole() == Role.CUSTOMER) {
+        cancelAsCustomer(user, order);
 
-            if (!order.getCustomerId().equals(user.getId())) {
-                throw new SecurityException(
-                        "Customers can only cancel their own orders"
-                );
-            }
+    } else if (user.getRole() == Role.OPERATOR) {
+        cancelAsOperator(order, orderId);
 
-            // Customers can cancel only PLACED orders
-            order.cancel();
-
-        } else if (user.getRole() == Role.OPERATOR) {
-
-            // Make sure an accepted order is in its FIFO queue
-            PreparationQueue queue = null;
-
-            if (order.getStatus() == OrderStatus.ACCEPTED) {
-
-                queue = getPreparationQueue(
-                        order.getRestaurantId()
-                );
-
-                boolean found = false;
-
-                for (Order waiting : queue.getWaitingOrders()) {
-                    if (waiting.getOrderId().equals(orderId)) {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found) {
-                    throw new IllegalStateException(
-                            "Accepted order is missing from preparation queue"
-                    );
-                }
-            }
-
-            // Domain checks whether this status can be cancelled
-            order.cancelByOperator();
-
-            // Accepted orders must leave the waiting queue
-            if (queue != null) {
-                queue.removeOrder(orderId);
-            }
-
-        } else {
-
-            throw new SecurityException(
-                    "Only customers and operators can cancel orders"
-            );
-        }
-
-        notifyLatestTransition(order);
-
-        return order;
+    } else {
+        throw new SecurityException(
+                "Only customers and operators can cancel orders"
+        );
     }
+
+    notifyLatestTransition(order);
+
+    return order;
+}
+
+// CUSTOMER CANCELLATION
+private void cancelAsCustomer(User user, Order order) {
+    if (!order.getCustomerId().equals(user.getId())) {
+        throw new SecurityException(
+                "Customers can only cancel their own orders"
+        );
+    }
+
+    // Customers can cancel only PLACED orders
+    order.cancel();
+}
+
+// OPERATOR CANCELLATION
+private void cancelAsOperator(Order order, Long orderId) {
+    PreparationQueue queue = null;
+
+    if (order.getStatus() == OrderStatus.ACCEPTED) {
+        queue = getPreparationQueue(order.getRestaurantId());
+
+        validateQueueMembership(queue, orderId);
+    }
+
+    // Domain checks whether this status can be cancelled
+    order.cancelByOperator();
+
+    // Accepted orders must leave the waiting queue
+    if (queue != null) {
+        queue.removeOrder(orderId);
+    }
+}
+
+// VALIDATE PREPARATION QUEUE MEMBERSHIP
+private void validateQueueMembership(
+        PreparationQueue queue,
+        Long orderId
+) {
+    boolean found = false;
+
+    for (Order waiting : queue.getWaitingOrders()) {
+        if (waiting.getOrderId().equals(orderId)) {
+            found = true;
+            break;
+        }
+    }
+
+    if (!found) {
+        throw new IllegalStateException(
+                "Accepted order is missing from preparation queue"
+        );
+    }
+}
 
     // RETRIEVE ONE ORDER
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
