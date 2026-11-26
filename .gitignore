@@ -20,3 +20,8 @@ dist/
 backend/data/
 *.mv.db
 *.trace.db
+
+# Python virtual environment (Lizard)
+.venv/
+
+
