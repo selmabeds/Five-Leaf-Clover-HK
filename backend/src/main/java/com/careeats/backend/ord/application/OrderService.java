@@ -26,10 +26,6 @@ import com.careeats.backend.reg.domain.Role;
 import com.careeats.backend.reg.domain.User;
 import com.careeats.backend.reg.infrastructure.UserRepo;
 
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +35,7 @@ public class OrderService {
 
     private final OrderRepository orderRepository;
     private final RestaurantRepository restaurantRepository;
-    private final UserRepo userRepo;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
     private final Runnable dispatchReadyOrders;
     private final OrderPlacementHandler placementChain; //Chain of Responsibility order placement validation (R-ORD-02)
     
@@ -90,7 +86,7 @@ public OrderService(
 
     this.orderRepository = orderRepository;
     this.restaurantRepository = restaurantRepository;
-    this.userRepo = userRepo;
+    this.authenticatedUserProvider = new AuthenticatedUserProvider(userRepo);
     this.restaurantAssignments = restaurantAssignments;
     this.dispatchReadyOrders = dispatchReadyOrders;
 
@@ -132,36 +128,10 @@ public OrderService(
         }
     }
 
-    // Find the currently authenticated user
-    private User getAuthenticatedUser() {
-
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null
-                || !authentication.isAuthenticated()
-                || authentication instanceof AnonymousAuthenticationToken) {
-
-            throw new SecurityException("User is not authenticated");
-        }
-
-        User user = userRepo.findByEmail(
-                authentication.getName()
-        );
-
-        if (user == null) {
-            throw new SecurityException(
-                    "Authenticated user not found"
-            );
-        }
-
-        return user;
-    }
-
     // Require a customer account
     private User requireCustomer() {
 
-        User user = getAuthenticatedUser();
+        User user = authenticatedUserProvider.getAuthenticatedUser();
 
         if (user.getRole() != Role.CUSTOMER) {
             throw new SecurityException(
@@ -175,7 +145,7 @@ public OrderService(
     // Verify restaurant staff authorization
     private void requireRestaurantStaff(Long restaurantId) {
 
-        User user = getAuthenticatedUser();
+        User user = authenticatedUserProvider.getAuthenticatedUser();
 
         if (user.getRole() != Role.RESTAURANT) {
             throw new SecurityException(
@@ -352,7 +322,7 @@ public OrderService(
 public synchronized Order cancelOrder(Long orderId) {
     orderRepository.lockForWrite();
 
-    User user = getAuthenticatedUser();
+    User user = authenticatedUserProvider.getAuthenticatedUser();
     Order order = requireOrder(orderId);
 
     if (user.getRole() == Role.CUSTOMER) {
@@ -428,7 +398,7 @@ private void validateQueueMembership(
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public Order getOrder(Long orderId) {
 
-        User user = getAuthenticatedUser();
+        User user = authenticatedUserProvider.getAuthenticatedUser();
         Order order = requireOrder(orderId);
 
         if (user.getRole() == Role.CUSTOMER) {
@@ -489,7 +459,7 @@ private void validateQueueMembership(
     public List<QueueSummary> getQueueSummary() {
 
         // Any authenticated user (R-REG-02); read-only: no state transitions, no events
-        getAuthenticatedUser();
+        authenticatedUserProvider.getAuthenticatedUser();
 
         List<Order> allOrders = orderRepository.findAll();
         List<QueueSummary> summary = new ArrayList<>();

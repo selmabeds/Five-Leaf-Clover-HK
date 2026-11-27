@@ -9,10 +9,6 @@ import com.careeats.backend.reg.domain.Role;
 import com.careeats.backend.reg.domain.User;
 import com.careeats.backend.reg.infrastructure.UserRepo;
 
-import org.springframework.security.authentication.AnonymousAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-
 import java.util.List;
 import java.util.Map;
 
@@ -20,7 +16,7 @@ import java.util.Map;
 public class MenuService {
 
     private final RestaurantRepository restaurantRepository;
-    private final UserRepo userRepo;
+    private final AuthenticatedUserProvider authenticatedUserProvider;
 
     // Restaurant user ID -> Restaurant ID
     private final Map<Long, Long> restaurantAssignments;
@@ -40,43 +36,15 @@ public class MenuService {
         }
 
         this.restaurantRepository = restaurantRepository;
-        this.userRepo = userRepo;
+        this.authenticatedUserProvider = new AuthenticatedUserProvider(userRepo);
         this.restaurantAssignments =
                 restaurantAssignments;
-    }
-
-    // Identify the currently authenticated user
-    private User getAuthenticatedUser() {
-
-        Authentication authentication =
-                SecurityContextHolder.getContext().getAuthentication();
-
-        if (authentication == null
-                || !authentication.isAuthenticated()
-                || authentication instanceof AnonymousAuthenticationToken) {
-
-            throw new SecurityException(
-                    "User is not authenticated"
-            );
-        }
-
-        User user = userRepo.findByEmail(
-                authentication.getName()
-        );
-
-        if (user == null) {
-            throw new SecurityException(
-                    "Authenticated user not found"
-            );
-        }
-
-        return user;
     }
 
     // Check permission to modify this restaurant's menu
     private void requireRestaurantManager(Long restaurantId) {
 
-        User user = getAuthenticatedUser();
+        User user = authenticatedUserProvider.getAuthenticatedUser();
 
         // Operators can manage any restaurant
         if (user.getRole() == Role.OPERATOR) {
@@ -150,7 +118,7 @@ public class MenuService {
     @org.springframework.transaction.annotation.Transactional(readOnly = true, isolation = org.springframework.transaction.annotation.Isolation.REPEATABLE_READ)
     public List<MenuItem> getMenu(Long restaurantId) {
 
-        User user = getAuthenticatedUser();
+        User user = authenticatedUserProvider.getAuthenticatedUser();
 
         Restaurant restaurant =
                 requireRestaurant(restaurantId);
@@ -178,7 +146,7 @@ public class MenuService {
             Long itemId
     ) {
 
-        getAuthenticatedUser();
+        authenticatedUserProvider.getAuthenticatedUser();
 
         Restaurant restaurant =
                 requireRestaurant(restaurantId);
