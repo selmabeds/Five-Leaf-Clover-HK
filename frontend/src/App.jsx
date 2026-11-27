@@ -83,6 +83,7 @@ const categories = [
   const [loggedIn, setLoggedIn] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
   const [logs, setLogs] = useState([]);
+  const [ratingRevision, setRatingRevision] = useState(0);
   const [restaurants, setRestaurants] = useState([]);
   const [menu, setMenu] = useState([]);
   const [selectedRestaurantId, setSelectedRestaurantId] = useState(null);
@@ -177,7 +178,7 @@ const categories = [
     }
   }
 
-  async function showForYou() {
+  async function showForYou(useAllWithoutPreferences = false) {
     const request = {};
     recommendationRequest.current = request;
     setSelectedCategory('For You');
@@ -185,13 +186,18 @@ const categories = [
     setRecommendationError('');
     try {
       const data = await getDietaryRecommendations();
-      if (recommendationRequest.current === request) setRecommendations(data);
+      if (recommendationRequest.current === request) {
+        setRecommendations(data);
+        if (useAllWithoutPreferences && data.dietaryRestrictions.length === 0) {
+          setSelectedCategory('All');
+        }
+      }
     } catch (error) {
       if (recommendationRequest.current === request) setRecommendationError(error.message);
     }
   }
 
-  async function loadMenu(restaurantId, personalized = false) {
+  async function loadMenu(restaurantId, personalized = selectedCategory === 'For You') {
     try {
       const data = personalized
         ? (await getDietaryRecommendations()).menus[restaurantId] ?? []
@@ -456,6 +462,7 @@ function handleReset() {
         setCustomerOrders([]);
         setMapSelectedId(null);
         await loadRestaurants();
+        setRatingRevision(previous => previous + 1);
         await loadQueueSummary();
         await loadCouriers();
         addLog('System restored to its initial state');
@@ -519,6 +526,11 @@ async function handleStartPreparation(order) {
 
       if (loginAccepted) {
         const user = await getCurrentUser();
+        if (user.role === 'CUSTOMER') {
+          await showForYou(true);
+        } else {
+          setSelectedCategory('All');
+        }
         setOrders([]);
         setCustomerOrders([]);
         setCouriers([]);
@@ -613,6 +625,7 @@ async function handleStartPreparation(order) {
           <h1>CARE Eats</h1>
 
           <InfoArea
+            ratingRevision={ratingRevision}
             user={currentUser}
             email={email}
             restaurant={infoRestaurant}
@@ -719,6 +732,7 @@ async function handleStartPreparation(order) {
             <section>
               <h3>Map</h3>
               <MapView
+                ratingRevision={ratingRevision}
                 restaurants={restaurants}
                 couriers={couriers}
                 queueSummary={queueSummary}
@@ -735,7 +749,15 @@ async function handleStartPreparation(order) {
           )}
 
           {isCustomer && activeTab === 'profile' && (
-            <ProfileView key={currentUser.userId} onSaved={() => setSelectedCategory('All')} />
+            <ProfileView
+              key={currentUser.userId}
+              onSaved={() => {
+                setMenu([]);
+                setSelectedRestaurantId(null);
+                setMapSelectedId(null);
+                showForYou(true);
+              }}
+            />
           )}
 
           {activeTab === 'restaurants' && canSeeRestaurantList && (
@@ -833,6 +855,9 @@ async function handleStartPreparation(order) {
 
           {activeTab === 'myorders' && isCustomer && (
             <CustomerOrderView
+              key={currentUser.userId}
+              onReviewSubmitted={() => setRatingRevision(previous => previous + 1)}
+              addLog={addLog}
               orders={customerOrders}
               loading={customerOrdersLoading}
               busy={pendingAction !== null}

@@ -59,6 +59,8 @@ public class SecurityConfiguration {
             request.getContextPath() + "/api/delivery/")
         || request.getRequestURI().startsWith(
            request.getContextPath() + "/api/profile")
+        || request.getRequestURI().startsWith(
+           request.getContextPath() + "/api/reviews")
 ))
             .formLogin(login -> login
                 .successHandler((request, response, authentication) -> {

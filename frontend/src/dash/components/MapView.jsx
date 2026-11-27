@@ -1,5 +1,6 @@
 
 import QueueBand from './QueueBand';
+import RestaurantRating from '../../rvw/RestaurantRating';
 import { queueBand } from './queueBandRule';
 
 /**
@@ -46,6 +47,7 @@ function range(values) {
 }
 
 export default function MapView({
+  ratingRevision,
   restaurants,
   couriers,
   queueSummary,
@@ -170,6 +172,7 @@ export default function MapView({
 
           {/* Small metrics (counts only, Spec Appendix A) */}
           <p>Status: {selected.status}</p>
+          <RestaurantRating restaurantId={selected.restaurantId} revision={ratingRevision} />
           <p><QueueBand queued={stats?.queued ?? 0} restaurantStatus={selected.status} /></p>
           <p>
             {stats?.queued ?? 0} in preparation queue · {stats?.preparing ?? 0} preparing · {stats?.ready ?? 0} ready

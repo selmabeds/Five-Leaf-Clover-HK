@@ -1,0 +1,109 @@
+.review-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  padding: 22px;
+  margin-top: 18px;
+  background: #f8f6f2;
+  border: 1px solid #ddd5cd;
+  border-radius: 14px;
+}
+
+.review-form h4,
+.review-form > p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.review-form > button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.review-score {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.review-score legend {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.review-stars {
+  display: flex;
+  gap: 5px;
+}
+
+.review-stars label {
+  position: relative;
+  cursor: pointer;
+}
+
+.review-stars input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.review-stars span {
+  display: inline-block;
+  font-size: 32px;
+  line-height: 1.3;
+  color: #d3cbc3;
+  border-radius: 4px;
+}
+
+.review-stars .selected {
+  color: #93602d;
+}
+
+.review-stars input:focus-visible + span {
+  outline: 2px solid #493f3a;
+  outline-offset: 2px;
+}
+
+.review-score:disabled label {
+  cursor: default;
+}
+
+.review-score:disabled {
+  opacity: 0.6;
+}
+
+.review-score-value {
+  display: block;
+  font-size: 13px;
+  margin-top: 6px;
+  color: #756359;
+}
+
+.review-result {
+  margin-top: 18px;
+  padding: 16px;
+  background: #f0ece7;
+  border-radius: 12px;
+}
+
+.review-result p {
+  margin: 8px 0 0;
+}
+
+.review-result span,
+.restaurant-rating > span {
+  color: #93602d;
+}
+
+.restaurant-rating .empty-rating {
+  color: #756359;
+  letter-spacing: 2px;
+}
+
+@media (max-width: 600px) {
+  .review-form {
+    grid-template-columns: 1fr;
+  }
+}

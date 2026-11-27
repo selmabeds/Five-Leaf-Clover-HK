@@ -66,7 +66,12 @@ export default function LoginView({
 
         {signingUp && (
           <details>
-            <summary>Dietary preferences (optional)</summary>
+            <summary>
+              Dietary preferences
+              <small style={{ display: 'block' }}>
+                <em>Set now or edit later in Profile</em>
+              </small>
+            </summary>
             <DietaryChecklist selected={dietaryRestrictions}
               onChange={onDietaryRestrictionsChange} disabled={registrationPending} />
           </details>

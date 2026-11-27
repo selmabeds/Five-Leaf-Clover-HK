@@ -35,6 +35,10 @@ export default function MenuView({
         <p>Select a restaurant from the Restaurants tab.</p>
       )}
 
+      {canOrder && selectedRestaurantId !== null && menu.length === 0 && (
+        <p>No available dishes match all your saved preferences.</p>
+      )}
+
       {/* R-DASH-04: no ordering from a paused or closed restaurant */}
       {canOrder && selectedRestaurant && restaurantClosed && (
         <p className="menu-notice">

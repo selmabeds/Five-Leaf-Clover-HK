@@ -7,15 +7,15 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-final class AuthenticatedUserProvider {
+public final class AuthenticatedUserProvider {
 
     private final UserRepo userRepo;
 
-    AuthenticatedUserProvider(UserRepo userRepo) {
+    public AuthenticatedUserProvider(UserRepo userRepo) {
         this.userRepo = userRepo;
     }
 
-    User getAuthenticatedUser() {
+    public User getAuthenticatedUser() {
         Authentication authentication =
                 SecurityContextHolder.getContext().getAuthentication();
 
