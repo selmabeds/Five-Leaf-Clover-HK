@@ -55,7 +55,7 @@ export default function PrcConsole({ user, logs, addLog, getCsrfToken }) {
   }
 
   return (
-    <section aria-busy={busy}>
+    <section className="prc-console" aria-busy={busy}>
       <h3>Output Console</h3>
       <p>History for {user.name} ({user.role.toLowerCase()})</p>
       <div className="prc-controls">
@@ -72,8 +72,15 @@ export default function PrcConsole({ user, logs, addLog, getCsrfToken }) {
             <button type="button" disabled={busy || !selectedOrder} onClick={() => viewDocument(false)}>View Order</button>
             <button type="button" disabled={busy || !selectedOrder?.receiptAvailable} onClick={() => viewDocument(true)}>View Receipt</button>
           </>}
-          {user.role === 'OPERATOR' && <button type="button" disabled={busy || !selectedOrder?.refundable}
-            onClick={refund}>Refund</button>}
+          {user.role === 'OPERATOR' && (
+            <button
+              type="button"
+              disabled={busy || !selectedOrder?.refundable}
+              onClick={refund}
+            >
+              {selectedOrder?.status === 'REFUNDED' ? 'Refunded' : 'Refund'}
+            </button>
+          )}
         </>}
       </div>
       {busy && <p role="status">Loading...</p>}

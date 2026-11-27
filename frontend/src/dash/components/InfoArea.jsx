@@ -1,5 +1,6 @@
 
 import QueueBand from './QueueBand';
+import RestaurantRating from '../../rvw/RestaurantRating';
 
 /**
  * DASH UI layer: information area (Spec DASH › Goal).
@@ -10,7 +11,7 @@ import QueueBand from './QueueBand';
  * "a Reset action to restore the initial scenario": operator only (R-DASH-01 "restore the initial state").
  * The optional map label toggle belongs here too and comes with the map.
  */
-export default function InfoArea({ user, email, restaurant, stats, canReset, busy, onReset }) {
+export default function InfoArea({ user, email, restaurant, stats, canReset, busy, onReset, ratingRevision }) {
   return (
     <div className="info-area">
       <p className="info-user">
@@ -27,6 +28,7 @@ export default function InfoArea({ user, email, restaurant, stats, canReset, bus
         <div className="info-restaurant">
           <span className="info-restaurant-name">{restaurant.name}</span>
           <span>Status: {restaurant.status}</span>
+          <RestaurantRating restaurantId={restaurant.restaurantId} revision={ratingRevision} />
           <span>{stats?.queued ?? 0} queued</span>
           <span>{stats?.preparing ?? 0} in preparation</span>
           <span>{stats?.ready ?? 0} ready</span>
