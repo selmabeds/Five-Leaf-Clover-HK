@@ -25,13 +25,27 @@ public class RegistrationService {
       return register(name, email, password, role, Set.of());
   }
 
+     // Registration with dietary restrictions
     public User register(String name, String email, String password, Role role, Set<DietaryRestriction> dietaryRestrictions) {
+
+        email = validateAndNormalizeInput(name, email, password, role);
+
+        Set<DietaryRestriction> restrictions =
+                validateDietaryRestrictions(role, dietaryRestrictions);
+
+        return createAndSaveUser(
+                name, email, password, role, restrictions
+        );
+    }
+
+    // Validate required fields and normalize email
+    private String validateAndNormalizeInput(
+            String name, String email, String password, Role role) {
 
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Name is required");
         }
 
-        //
         if (email == null || email.isBlank()) {
             throw new IllegalArgumentException("Email is required");
         }
@@ -46,34 +60,52 @@ public class RegistrationService {
             throw new IllegalArgumentException("Role is required");
         }
 
+        return email;
+    }
 
-       // Validate dietary restrictions
-        Set<DietaryRestriction> restrictions = dietaryRestrictions == null
-        ? Set.of()
-        : Set.copyOf(dietaryRestrictions);
+    // Validate dietary restrictions
+    private Set<DietaryRestriction> validateDietaryRestrictions(
+            Role role, Set<DietaryRestriction> dietaryRestrictions) {
 
-       if (role != Role.CUSTOMER && !restrictions.isEmpty()) {
-        throw new IllegalArgumentException(
-        "Dietary restrictions are only allowed for customers"
-        );
-       }
+        Set<DietaryRestriction> restrictions =
+                dietaryRestrictions == null
+                        ? Set.of()
+                        : Set.copyOf(dietaryRestrictions);
 
-         userRepo.lockForWrite();
+        if (role != Role.CUSTOMER && !restrictions.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Dietary restrictions are only allowed for customers"
+            );
+        }
 
-        //two accounts can't have the same email
+        return restrictions;
+    }
+
+    // Check duplicate email, hash password and save user
+    private User createAndSaveUser(
+            String name, String email, String password,
+            Role role, Set<DietaryRestriction> restrictions) {
+
+        userRepo.lockForWrite();
+
         if (userRepo.emailExists(email)) {
             throw new IllegalArgumentException("Email already registered");
         }
 
-
-        //store password asa secure hash for safety
         String passwordHash = passwordEncoder.encode(password);
 
-        //if passes all validation, create a new user
-       User user = new User(userRepo.nextId(), name, email, passwordHash,role, restrictions);
+        User user = new User(
+                userRepo.nextId(),
+                name,
+                email,
+                passwordHash,
+                role,
+                restrictions
+        );
 
         userRepo.save(user);
 
         return user;
     }
+
 }
